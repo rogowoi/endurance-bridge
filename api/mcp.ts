@@ -28,7 +28,7 @@ export default async function handler(
     auth: {
       token: "validated",
       clientId: "endurance-bridge-client",
-      scopes: ["garmin"],
+      scopes: ["endurance"],
       extra: { userId: user.id }
     }
   });

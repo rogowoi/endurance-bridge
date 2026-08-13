@@ -1,28 +1,26 @@
 # Endurance Bridge
 
-Endurance Bridge connects Garmin to Codex, Claude Code, and other MCP clients. The hosted app supports separate invite-only accounts, private Garmin connections, and individual MCP keys.
+Endurance Bridge is a multi-user MCP gateway for endurance data. A person connects a provider once, adds one private MCP endpoint to Codex, Claude, or another compatible client, and can then discuss training periods or manage training resources in plain language.
+
+Garmin is the active adapter. Strava and TrainingPeaks are represented in the capability model and are planned adapters; the server reports them as unavailable instead of pretending they work.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
-## Give this repository to Codex or Claude Code
+## Give this repository to an agent
 
-Invited friends can start from a clean session with:
+From a clean Codex or Claude Code session, say:
 
-> Help me connect my Garmin using https://github.com/rogowoi/endurance-bridge
+> Help me connect my training data using https://github.com/rogowoi/endurance-bridge
 
-The repository's [`AGENTS.md`](./AGENTS.md) contains the shared onboarding contract. Codex reads it directly; Claude Code loads it through [`CLAUDE.md`](./CLAUDE.md). The agent asks for the user's invite link, guides Garmin connection, adds the hosted MCP, and verifies it with a live read—without discussing infrastructure unless the user asks to self-host.
+[`AGENTS.md`](./AGENTS.md) is the shared onboarding contract. Codex reads it directly and Claude Code loads it through [`CLAUDE.md`](./CLAUDE.md). An invited user does not need a Garmin developer account, database, or Vercel project; the hosted deployment owns that infrastructure.
 
-Friends do not need a Garmin developer account, database, or Vercel project. The hosted deployment uses the approved Endurance Bridge Garmin application. Self-hosters still need their own approved Garmin developer application.
+## Install the skill
 
-## Install the Endurance Bridge skill
-
-Give Codex this request:
+Ask Codex:
 
 > Install the `endurance-bridge` skill from https://github.com/rogowoi/endurance-bridge/tree/main/skills/endurance-bridge
 
-Codex can install it with its built-in `skill-installer`. The skill becomes available on the next turn and teaches a clean session how to onboard a user, register the hosted MCP, restart the macOS app correctly, verify the connection with a live read, and use all Garmin read and write tools.
-
-Manual Codex installation is also supported:
+Or install it manually:
 
 ```bash
 python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
@@ -30,138 +28,119 @@ python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-githu
   --path skills/endurance-bridge
 ```
 
-The skill uses the open Agent Skills directory format, so other compatible clients can install the [`skills/endurance-bridge`](./skills/endurance-bridge) folder as well.
+The skill uses the open Agent Skills directory format. It teaches a fresh agent setup, query routing, coverage semantics, and the two-step change workflow.
 
-## What works
+## The MCP contract
 
-- Garmin OAuth 2.0 PKCE connection from a private setup page
-- Invite-only multi-user accounts with isolated connections
-- One-way-hashed MCP keys and browser sessions
-- Garmin Activity PUSH webhook ingestion
-- Encrypted provider-token storage using AES-256-GCM
-- Bearer-protected Streamable HTTP MCP endpoint
-- Eighteen Garmin MCP tools, including a post-workout flow that waits for sync and returns the latest session with available details:
-  - `garmin_connection_status`
-  - `garmin_get_latest_activity`
-  - `garmin_list_activities`
-  - `garmin_get_activity`
-  - `garmin_list_events`
-  - `garmin_get_workout`
-  - `garmin_create_workout`
-  - `garmin_update_workout`
-  - `garmin_delete_workout`
-  - `garmin_list_schedules`
-  - `garmin_get_schedule`
-  - `garmin_create_schedule`
-  - `garmin_update_schedule`
-  - `garmin_delete_schedule`
-  - `garmin_get_course`
-  - `garmin_create_course`
-  - `garmin_update_course`
-  - `garmin_delete_course`
-- Codex and Claude Code configuration
+The public contract is provider-neutral and intentionally small:
 
-Strava and TrainingPeaks are planned adapters. The event model is already provider-neutral.
+| Tool | Purpose |
+| --- | --- |
+| `endurance_get_capabilities` | Discover connected providers, permissions, delivery modes, and supported operations |
+| `endurance_get_coverage` | Check whether a resource and time range is ready, partial, or unavailable |
+| `endurance_sync` | Resolve missing coverage using the provider-supported synchronization path |
+| `endurance_get_period` | Fetch a complete session, week, block, or comparison bundle |
+| `endurance_list_activities` | Return canonical activity groups, totals, provenance, and coverage |
+| `endurance_get_activity` | Return one canonical activity and all available detail records |
+| `endurance_get_health` | Query health and recovery summaries for a period |
+| `endurance_get_workouts` | Fetch structured workouts by provider ID |
+| `endurance_get_calendar` | Query planned training live from providers |
+| `endurance_get_routes` | Fetch routes by provider ID |
+| `endurance_prepare_change` | Validate and preview a workout, calendar, or route mutation |
+| `endurance_apply_change` | Apply one approved, unexpired prepared change |
 
-Activity and health tools read summaries already delivered to this deployment through Garmin PUSH; they are not live Garmin history queries. If expected history is missing, use Garmin API Tools **Summary Resender** for the relevant user, summary types, and time range. Workout, schedule, and course reads call Garmin live.
+There are no public `garmin_*` tools. Provider-specific endpoints and payload rules live behind this contract.
 
-## Discuss a workout you just finished
+## Natural-language use cases
 
-1. Save the activity on your Garmin device.
-2. Let the watch sync with the Garmin Connect phone app.
-3. Ask Codex or Claude: **“Discuss my latest training session.”**
+The default tool for training discussion is `endurance_get_period`:
 
-The agent calls `garmin_get_latest_activity`, waits briefly for Garmin delivery, and receives the newest activity summary plus Activity Details when available. If delivery is still pending, it tells you to sync and retries instead of claiming that no activity exists.
+- “Discuss the session I just finished.”
+- “Review my full last week, including sleep and planned versus completed training.”
+- “Compare the last four weeks with the four before them.”
+- “What did I miss from the plan this week?”
+- “Build a recovery week from what I actually completed.”
+
+Every period response contains deterministic totals, source provenance, and coverage. A partial result is never interpreted as zero training.
+
+For a newly connected Garmin account, Activity and Health data already delivered after connection can be queried immediately at runtime. Garmin does not provide an arbitrary historical pull endpoint for these products; `endurance_sync` detects pre-connection gaps and returns the exact Summary Resender action instead. Calendar, workout, and route operations call Garmin live.
 
 ## Architecture
 
-The hosted deployment is multi-user:
-
 1. The owner creates single-use, seven-day invitation links.
-2. Every invited person gets a separate account, Garmin connection, and MCP key.
-3. MCP keys are stored as hashes; Garmin OAuth tokens are encrypted before storage.
-4. Every MCP request resolves the authenticated user before reading data or calling Garmin.
-
-Every mutation defaults to a dry run. To send it to Garmin, repeat the same tool call with `dryRun: false` and `confirm: "WRITE_TO_GARMIN"`.
+2. Each person gets an isolated account, provider connection, and MCP key.
+3. MCP keys are one-way hashed; provider OAuth tokens are encrypted at rest.
+4. Each MCP request resolves the authenticated user before reading or calling a provider.
+5. Provider records are normalized into canonical activities and health events with source provenance.
+6. Mutations are provider-neutral: prepare an exact preview, obtain immediate approval, then apply the encrypted change token once.
 
 ## Deploy
 
-Prerequisites:
+Prerequisites for self-hosting:
 
-- PostgreSQL or Neon database
-- Vercel account
-- Approved Garmin Connect Developer Program application with Activity, Training, and Courses API access
+- PostgreSQL or Neon
+- Vercel
+- An approved Garmin Connect Developer Program app with the required Activity, Health, Training, and Courses products
 
-1. Deploy with the button above or clone this repository.
-2. Run `pnpm bootstrap` to create `.env.local` with unique generated secrets, then add the database and Garmin credentials.
-3. Apply [`schema.sql`](./schema.sql) to the database.
-4. Configure these environment variables:
+1. Clone the repository and run `pnpm install`.
+2. Run `pnpm bootstrap`, then add the database and Garmin credentials to `.env.local`.
+3. Apply [`schema.sql`](./schema.sql).
+4. Configure:
 
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL connection string |
-| `BRIDGE_API_KEY` | Long random bearer key for setup and MCP clients |
-| `APP_ORIGIN` | Public deployment origin, for example `https://bridge.example.com` |
+| `BRIDGE_API_KEY` | Owner/setup bearer key |
+| `APP_ORIGIN` | Public deployment origin |
 | `CONNECTION_ENCRYPTION_KEY` | Random 32-byte key encoded as base64 |
 | `GARMIN_CLIENT_ID` | Garmin application client ID |
 | `GARMIN_CLIENT_SECRET` | Garmin application client secret |
-| `GARMIN_WEBHOOK_SECRET` | Long random URL segment for Garmin PUSH callbacks |
+| `GARMIN_WEBHOOK_SECRET` | Long random webhook URL segment |
 
-Generate safe keys:
+Generate secrets with `openssl rand -hex 32` and an encryption key with `openssl rand -base64 32`.
 
-```bash
-openssl rand -hex 32       # BRIDGE_API_KEY and GARMIN_WEBHOOK_SECRET
-openssl rand -base64 32    # CONNECTION_ENCRYPTION_KEY
-```
-
-5. Register this exact Garmin OAuth callback:
+5. Register this OAuth callback:
 
 ```text
 https://YOUR_ORIGIN/api/v1/setup/garmin/callback
 ```
 
-6. Configure Garmin Activity summaries as PUSH notifications to:
+6. Configure Garmin PUSH delivery to:
 
 ```text
 https://YOUR_ORIGIN/api/v1/ingest/garmin/GARMIN_WEBHOOK_SECRET
 ```
 
-Enable `activities`, `activityDetails`, `manuallyUpdatedActivities`, `deregistrations`, and `userPermissionsChange`.
-
-7. Open `https://YOUR_ORIGIN/`, enter `BRIDGE_API_KEY`, and select **Connect Garmin**.
+7. Open `https://YOUR_ORIGIN/`, enter `BRIDGE_API_KEY`, connect Garmin, invite users, and create a private MCP key.
 
 ## Add to Codex
 
-Each deployment has a different origin and bridge key, so Codex registers the MCP after deployment.
-
-For the Codex desktop app on macOS, set the key for both terminal and GUI processes before registering the server:
+Use the complete command shown by the dashboard. On macOS it has this form:
 
 ```bash
-export ENDURANCE_BRIDGE_API_KEY='your-bridge-key'
+export ENDURANCE_BRIDGE_API_KEY='your-private-key'
 launchctl setenv ENDURANCE_BRIDGE_API_KEY "$ENDURANCE_BRIDGE_API_KEY"
 codex mcp add endurance-bridge \
   --url https://YOUR_ORIGIN/api/mcp \
   --bearer-token-env-var ENDURANCE_BRIDGE_API_KEY
 ```
 
-Then fully quit Codex with **Codex → Quit Codex** or `⌘Q` and reopen it. Closing its window is not enough: the running app must restart to inherit the key. Start a clean task and ask it to call `garmin_connection_status`, followed by a harmless read such as `garmin_list_schedules`.
+Fully quit Codex with **Codex → Quit Codex** or `⌘Q`, reopen it, and start a clean task. Ask: **“Check my endurance providers and discuss my full last week.”**
 
-For Codex CLI-only use, the `export` and `codex mcp add` lines are sufficient when Codex is launched from that same shell. After a Mac restart, run the `launchctl setenv` line again before opening the desktop app.
+For CLI-only use, export the key in the shell that launches Codex. After restarting macOS, set the `launchctl` value again before opening the desktop app.
 
 ## Add to Claude Code
 
-Claude Code can expand environment variables in HTTP MCP headers:
-
 ```bash
-export ENDURANCE_BRIDGE_API_KEY='your-bridge-key'
+export ENDURANCE_BRIDGE_API_KEY='your-private-key'
 claude mcp add-json endurance-bridge \
   '{"type":"http","url":"https://YOUR_ORIGIN/api/mcp","headers":{"Authorization":"Bearer ${ENDURANCE_BRIDGE_API_KEY}"}}' \
   --scope user
 ```
 
-Use `/mcp` inside Claude Code to inspect the connection.
+Use `/mcp` to inspect the connection, then ask the same natural-language questions.
 
-## Local development
+## Development
 
 ```bash
 cp .env.example .env
@@ -170,23 +149,22 @@ pnpm check
 vercel dev
 ```
 
-Test a running MCP deployment with the official MCP client SDK:
+Verify a deployment with the official MCP client SDK:
 
 ```bash
 ENDURANCE_BRIDGE_MCP_URL=https://YOUR_ORIGIN/api/mcp \
-ENDURANCE_BRIDGE_API_KEY='your-bridge-key' \
+ENDURANCE_BRIDGE_API_KEY='your-private-key' \
 pnpm mcp:check
 ```
 
-## Security
+## Privacy and change control
 
-- Never commit `.env`, provider secrets, OAuth tokens, activity exports, or personal MCP keys.
-- Provider callback URLs and token-like fields are removed recursively before events are stored.
-- Provider tokens are encrypted at rest with a deployment-specific key.
-- The setup APIs and MCP endpoint require `Authorization: Bearer BRIDGE_API_KEY`.
-- Garmin deregistration notifications remove the connected Garmin user's stored events.
-- Garmin write tools default to a no-op preview and require the exact `WRITE_TO_GARMIN` confirmation to execute.
-- Activity, health, route, and routine information should be treated as sensitive personal data.
+- Never commit environment files, provider secrets, OAuth tokens, activity exports, or personal MCP keys.
+- Callback URLs and token-like fields are removed recursively before event storage.
+- Account data is always scoped by user ID.
+- Treat health, activity, location, route, and routine data as sensitive.
+- `endurance_prepare_change` performs no provider mutation.
+- Apply only the exact preview the user just approved, using `endurance_apply_change` with `confirm: "APPLY_ENDURANCE_CHANGE"`.
 
 ## License
 

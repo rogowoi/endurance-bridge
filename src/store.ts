@@ -152,3 +152,23 @@ export async function queryGarminActivity(
   `;
   return rows;
 }
+
+export async function queryProviderEventCoverage(
+  provider: Provider,
+  providerUserId: string,
+  eventTypes: string[]
+) {
+  const sql = database();
+  const rows = await sql`
+    SELECT min(started_at) AS earliest_started_at,
+           max(started_at) AS latest_started_at,
+           min(received_at) AS earliest_received_at,
+           max(received_at) AS latest_received_at,
+           count(*)::int AS record_count
+    FROM endurance_event
+    WHERE provider = ${provider}
+      AND provider_user_id = ${providerUserId}
+      AND event_type = ANY(${eventTypes}::text[])
+  `;
+  return rows[0] ?? {};
+}

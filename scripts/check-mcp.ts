@@ -15,7 +15,7 @@ const transport = new StreamableHTTPClientTransport(new URL(url), {
 await client.connect(transport);
 const { tools } = await client.listTools();
 const status = await client.callTool({
-  name: "garmin_connection_status",
+  name: "endurance_get_capabilities",
   arguments: {}
 });
 console.log(
@@ -24,7 +24,7 @@ console.log(
       connected: true,
       protocolVersion: client.getNegotiatedProtocolVersion(),
       tools: tools.map((tool) => tool.name),
-      garmin: status.structuredContent
+      capabilities: status.structuredContent
     },
     null,
     2

@@ -1,39 +1,40 @@
-# Garmin MCP tools
+# Endurance MCP tools
 
-## Read tools
+## Query tools
 
-| Task | Tool | Key inputs |
+| Task | Tool | Main inputs |
 | --- | --- | --- |
-| Check connection and permissions | `garmin_connection_status` | None |
-| Discuss the newest completed session | `garmin_get_latest_activity` | Optional `lookbackHours` and `waitForSyncSeconds` |
-| List completed activities | `garmin_list_activities` | Optional inclusive ISO `from`, exclusive ISO `to`, `limit` 1–200 |
-| Get stored activity records | `garmin_get_activity` | `summaryId` from the activity list |
-| Inspect normalized Garmin feed | `garmin_list_events` | Optional event `type`, ISO range, and `limit` |
-| Get a workout | `garmin_get_workout` | `workoutId` |
-| List scheduled workouts | `garmin_list_schedules` | Inclusive `startDate` and `endDate` as `YYYY-MM-DD` |
-| Get a schedule entry | `garmin_get_schedule` | `workoutScheduleId` |
-| Get a course or route | `garmin_get_course` | `courseId` |
+| Discover providers and operations | `endurance_get_capabilities` | None |
+| Inspect completeness | `endurance_get_coverage` | Provider, resource, optional ISO range |
+| Resolve a coverage gap | `endurance_sync` | Provider, resource, ISO range |
+| Discuss a session, week, block, or comparison | `endurance_get_period` | ISO range, timezone, optional comparison |
+| Search activities | `endurance_list_activities` | ISO range, providers, limit |
+| Inspect one activity | `endurance_get_activity` | Canonical `activityId` |
+| Inspect recovery context | `endurance_get_health` | ISO range, optional event types |
+| Read known workouts | `endurance_get_workouts` | Provider and workout IDs |
+| Read planned training | `endurance_get_calendar` | ISO range, timezone, providers |
+| Read known routes | `endurance_get_routes` | Provider and route IDs |
 
-Use the user's timezone to resolve relative dates such as “this week.” State the resulting date range when it matters.
+Use half-open time ranges: `from` is inclusive and `to` is exclusive. Resolve natural dates such as “last week” in the user's timezone and state the resulting range when ambiguity matters.
 
-Activity and health reads query Garmin PUSH data already received by Endurance Bridge. They are not live Garmin queries. Schedule, workout, and course reads call Garmin live.
+`ready` means the adapter can answer the requested range under its documented delivery model. `partial` means some requested history may be missing. `unavailable` means the provider, permission, or adapter is not available. Always preserve `coverage` and `provenance` when presenting conclusions.
 
-If expected activity data is absent, use Garmin API Tools → Summary Resender to resend the relevant summary types and time range. If notifications were accepted but not processed and the resender cannot recover them, Garmin's Activity API documentation directs partners to Developer Support for regeneration. Do not invent a historical pull URL: Activity API pull URLs contain Garmin-issued tokens delivered in PING notifications.
+Garmin Activity and Health use provider PUSH delivery into the bridge. New post-connection summaries are runtime-queryable from the mirror. Historical gaps require the recovery action returned by `endurance_sync`. Garmin calendar, workout, and route calls are live.
 
-## Write tools
+## Change tools
 
-The MCP exposes create, update, and delete tools for workouts, schedules, and courses. Use the live tool schema to construct the provider payload.
+Use `endurance_prepare_change` for provider-neutral workout, calendar-item, and route changes. It validates the operation and returns an exact preview plus a short-lived encrypted token without calling the provider.
 
-- Workout and schedule writes require `WORKOUT_IMPORT`.
-- Course writes require `COURSE_IMPORT`.
-- Create payloads must not contain a resource ID.
-- Update payload IDs must match the tool's path ID.
-- Updates replace the full resource, so retrieve the existing resource first when changing only part of it.
-- Every write requires a dry run, a fresh user approval, and then the exact `WRITE_TO_GARMIN` confirmation.
+After the user approves that exact preview, call `endurance_apply_change` once with the token and `confirm: "APPLY_ENDURANCE_CHANGE"`.
+
+- Create operations require a payload and omit provider resource IDs.
+- Update operations require a resource ID; any ID inside the payload must match it.
+- Delete operations require a resource ID and no payload.
+- Updates may replace the full provider resource, so retrieve current state before a partial conceptual edit.
 
 ## Interpretation
 
-- An empty schedule result means Garmin returned no scheduled workouts for that range.
-- An empty activity result means the bridge has no matching received PUSH records. It says nothing definitive about whether the user trained or what Garmin Connect contains.
-- Separate “configured API products” from the permissions shown by `garmin_connection_status`.
-- Treat health, activity, location, course, and routine data as private.
+- Empty data with ready coverage is evidence of no matching records in that source and range.
+- Empty data with partial coverage is inconclusive.
+- Provider facts, deterministic aggregates, and coaching interpretation are different layers; label them accordingly.
+- Treat activity, health, location, route, and routine data as private.
