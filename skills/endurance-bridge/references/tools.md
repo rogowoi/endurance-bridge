@@ -5,6 +5,7 @@
 | Task | Tool | Key inputs |
 | --- | --- | --- |
 | Check connection and permissions | `garmin_connection_status` | None |
+| Discuss the newest completed session | `garmin_get_latest_activity` | Optional `lookbackHours` and `waitForSyncSeconds` |
 | List completed activities | `garmin_list_activities` | Optional inclusive ISO `from`, exclusive ISO `to`, `limit` 1–200 |
 | Get stored activity records | `garmin_get_activity` | `summaryId` from the activity list |
 | Inspect normalized Garmin feed | `garmin_list_events` | Optional event `type`, ISO range, and `limit` |

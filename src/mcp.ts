@@ -72,6 +72,16 @@ function errorResult(message: string) {
   };
 }
 
+function recordValue(record: unknown, key: string): unknown {
+  return typeof record === "object" && record !== null
+    ? (record as Record<string, unknown>)[key]
+    : undefined;
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function dateRange(from?: string, to?: string) {
   if (Boolean(from) !== Boolean(to)) {
     throw new Error("from and to must be provided together");
@@ -195,10 +205,10 @@ export function createEnduranceBridgeMcpServer(
   const scopedDataSource = dataSource ?? productionDataSource(userId);
   const scopedGarminApi = garminApi ?? createProductionGarminApi(userId);
   const server = new McpServer(
-    { name: "endurance-bridge", version: "0.3.0" },
+    { name: "endurance-bridge", version: "0.4.0" },
     {
       instructions:
-        "Endurance Bridge exposes private Garmin activity data and the complete Garmin Training and Courses resource operations. Treat activity, health, location, routes, workouts, and routine data as sensitive. Activity and event tools query summaries already received by the bridge through Garmin PUSH; they do not query Garmin live and must never be described as Garmin returning zero. Workout, schedule, and course reads query Garmin live. Before every create, update, schedule, or delete operation, call the same tool with dryRun=true, show the exact request to the user, obtain immediate approval, then call it once with dryRun=false and confirm=WRITE_TO_GARMIN. Never reuse a confirmation."
+        "When the user wants to discuss a recent training session, call garmin_get_latest_activity first. It waits briefly for Garmin sync and returns the newest summary together with any detailed record. If it reports waiting_for_garmin_sync, ask the user to sync their watch in Garmin Connect and retry; never say Garmin returned zero activities. Endurance Bridge exposes private Garmin data and complete Training and Courses operations. Activity and event tools query summaries received through Garmin PUSH. Workout, schedule, and course reads query Garmin live. Before every write, call the same tool with dryRun=true, show the preview, obtain immediate approval, then call it once with dryRun=false and confirm=WRITE_TO_GARMIN."
     }
   );
 
@@ -223,6 +233,96 @@ export function createEnduranceBridgeMcpServer(
           strava: "planned",
           trainingpeaks: "planned"
         }
+      });
+    }
+  );
+
+  server.registerTool(
+    "garmin_get_latest_activity",
+    {
+      title: "Get latest Garmin activity for discussion",
+      description:
+        "Wait briefly for Garmin sync, then return the newest received activity summary together with every stored detail record. Use this first when the user wants to discuss a session they just completed.",
+      inputSchema: z.object({
+        lookbackHours: z
+          .number()
+          .int()
+          .min(1)
+          .max(168)
+          .default(24)
+          .describe("How far back to look for the session"),
+        waitForSyncSeconds: z
+          .number()
+          .int()
+          .min(0)
+          .max(45)
+          .default(20)
+          .describe("How long to wait for Garmin PUSH and activity details")
+      }),
+      annotations: READ_ONLY
+    },
+    async ({ lookbackHours, waitForSyncSeconds }) => {
+      const connection = await scopedDataSource.connection("garmin");
+      if (!connection) return errorResult("Garmin is not connected.");
+      if (!connection.permissions.includes("ACTIVITY_EXPORT")) {
+        return errorResult("Garmin permission ACTIVITY_EXPORT is not granted.");
+      }
+
+      const requestedAt = new Date();
+      const from = new Date(requestedAt.getTime() - lookbackHours * 60 * 60 * 1000);
+      const to = new Date(requestedAt.getTime() + 5 * 60 * 1000);
+      const deadline = Date.now() + waitForSyncSeconds * 1000;
+      let latest: unknown;
+      let records: unknown[] = [];
+
+      do {
+        const activities = await scopedDataSource.activities(
+          connection.providerUserId,
+          from,
+          to,
+          1
+        );
+        latest = activities[0];
+        const summaryId = recordValue(latest, "external_id");
+        if (summaryId !== undefined && summaryId !== null) {
+          records = await scopedDataSource.activity(
+            connection.providerUserId,
+            String(summaryId)
+          );
+          const hasDetails = records.some(
+            (record) => recordValue(record, "event_type") === "activityDetails"
+          );
+          if (hasDetails || Date.now() >= deadline) break;
+        } else if (Date.now() >= deadline) {
+          break;
+        }
+        await delay(Math.min(2000, Math.max(0, deadline - Date.now())));
+      } while (Date.now() < deadline);
+
+      const waitedSeconds = Math.round((Date.now() - requestedAt.getTime()) / 100) / 10;
+      if (!latest) {
+        return textResult({
+          status: "waiting_for_garmin_sync",
+          source: "endurance_bridge_push_store",
+          liveGarminQuery: false,
+          waitedSeconds,
+          searchedFrom: from.toISOString(),
+          searchedTo: to.toISOString(),
+          nextAction:
+            "Sync the watch with Garmin Connect, wait a few seconds, then call garmin_get_latest_activity again."
+        });
+      }
+
+      return textResult({
+        status: "ready",
+        source: "endurance_bridge_push_store",
+        liveGarminQuery: false,
+        waitedSeconds,
+        activityDetailsAvailable: records.some(
+          (record) => recordValue(record, "event_type") === "activityDetails"
+        ),
+        activity: latest,
+        records
       });
     }
   );

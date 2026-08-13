@@ -32,6 +32,7 @@ Do not use a local Garmin script, password automation, scraping library, or anot
 
 Treat the live MCP tool schemas as the authority for arguments. Use the smallest tool that answers the request:
 
+- A session the user just finished or wants to discuss: call `garmin_get_latest_activity` first. If its status is `waiting_for_garmin_sync`, ask the user to sync the watch with Garmin Connect and retry the same tool. When ready, analyze the returned summary and detail records; ask about perceived effort, pain, fueling, conditions, or the workout goal only when those details materially improve the discussion.
 - Connection and permissions: `garmin_connection_status`
 - Completed activity summaries received by the bridge: `garmin_list_activities`, then `garmin_get_activity`
 - Health and raw PUSH data received by the bridge: `garmin_list_events`

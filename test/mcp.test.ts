@@ -78,6 +78,7 @@ test("exposes Garmin activity, workout, schedule, and course tools", async () =>
       "garmin_delete_workout",
       "garmin_get_activity",
       "garmin_get_course",
+      "garmin_get_latest_activity",
       "garmin_get_schedule",
       "garmin_get_workout",
       "garmin_list_activities",
@@ -91,6 +92,21 @@ test("exposes Garmin activity, workout, schedule, and course tools", async () =>
   assert.equal(
     listed.tools.find((tool) => tool.name === "garmin_create_workout")?.annotations
       ?.readOnlyHint,
+    false
+  );
+
+  const latest = await client.callTool({
+    name: "garmin_get_latest_activity",
+    arguments: { waitForSyncSeconds: 0 }
+  });
+  assert.equal(latest.isError, undefined);
+  assert.equal(
+    (latest.structuredContent as { status: string }).status,
+    "ready"
+  );
+  assert.equal(
+    (latest.structuredContent as { activityDetailsAvailable: boolean })
+      .activityDetailsAvailable,
     false
   );
   assert.equal(
@@ -202,6 +218,12 @@ test("reports an unconnected Garmin account", async () => {
     arguments: {}
   });
   assert.equal(activities.isError, true);
+
+  const latest = await client.callTool({
+    name: "garmin_get_latest_activity",
+    arguments: { waitForSyncSeconds: 0 }
+  });
+  assert.equal(latest.isError, true);
 
   const write = await client.callTool({
     name: "garmin_create_workout",

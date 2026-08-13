@@ -40,8 +40,9 @@ The skill uses the open Agent Skills directory format, so other compatible clien
 - Garmin Activity PUSH webhook ingestion
 - Encrypted provider-token storage using AES-256-GCM
 - Bearer-protected Streamable HTTP MCP endpoint
-- Seventeen Garmin MCP tools:
+- Eighteen Garmin MCP tools, including a post-workout flow that waits for sync and returns the latest session with available details:
   - `garmin_connection_status`
+  - `garmin_get_latest_activity`
   - `garmin_list_activities`
   - `garmin_get_activity`
   - `garmin_list_events`
@@ -63,6 +64,14 @@ The skill uses the open Agent Skills directory format, so other compatible clien
 Strava and TrainingPeaks are planned adapters. The event model is already provider-neutral.
 
 Activity and health tools read summaries already delivered to this deployment through Garmin PUSH; they are not live Garmin history queries. If expected history is missing, use Garmin API Tools **Summary Resender** for the relevant user, summary types, and time range. Workout, schedule, and course reads call Garmin live.
+
+## Discuss a workout you just finished
+
+1. Save the activity on your Garmin device.
+2. Let the watch sync with the Garmin Connect phone app.
+3. Ask Codex or Claude: **“Discuss my latest training session.”**
+
+The agent calls `garmin_get_latest_activity`, waits briefly for Garmin delivery, and receives the newest activity summary plus Activity Details when available. If delivery is still pending, it tells you to sync and retries instead of claiming that no activity exists.
 
 ## Architecture
 
