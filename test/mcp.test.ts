@@ -200,7 +200,8 @@ test("returns a complete canonical period bundle", async () => {
 });
 
 test("queues historical coverage without exposing developer tooling", async () => {
-  const { client, server } = await connectedClient();
+  const recorded = recordingApi();
+  const { client, server } = await connectedClient(dataSource(), recorded.api);
   const result = await client.callTool({
     name: "endurance_get_coverage",
     arguments: {
@@ -226,6 +227,18 @@ test("queues historical coverage without exposing developer tooling", async () =
   assert.equal(
     (sync.structuredContent as { status: string }).status,
     "history_loading"
+  );
+  assert.equal(
+    recorded.requests.some((request) =>
+      request.path.startsWith("/wellness-api/rest/backfill/activities?")
+    ),
+    true
+  );
+  assert.equal(
+    recorded.requests.some((request) =>
+      request.path.startsWith("/wellness-api/rest/backfill/activityDetails?")
+    ),
+    true
   );
   assert.doesNotMatch(JSON.stringify(sync.structuredContent), /Summary Resender|apis\.garmin/);
   await client.close();

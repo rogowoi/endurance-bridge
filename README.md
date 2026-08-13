@@ -74,7 +74,7 @@ For a newly connected Garmin account, new Activity and Health data can be querie
 4. Each MCP request resolves the authenticated user before reading or calling a provider.
 5. Provider records are normalized into canonical activities and health events with source provenance.
 6. Mutations are provider-neutral: prepare an exact preview, obtain immediate approval, then apply the encrypted change token once.
-7. Historical Garmin recovery is queued automatically and completed by the deployment owner from the dashboard.
+7. Historical Garmin recovery is requested automatically through Garmin's authenticated backfill API when an AI asks for an older period.
 
 ## Deploy
 

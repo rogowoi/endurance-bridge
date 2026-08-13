@@ -20,6 +20,7 @@ import {
 import {
   historyState,
   requestHistory,
+  updateHistoryRequest,
   type HistoryRequest
 } from "./history-requests.js";
 import {
@@ -228,6 +229,26 @@ function matchPlan(
 
 const ACTIVITY_TYPES = ["activities", "activityDetails", "manuallyUpdatedActivities"];
 
+const GARMIN_BACKFILL_ENDPOINTS = {
+  activities: ["activities", "activityDetails"],
+  health: [
+    "bloodPressures",
+    "bodyComps",
+    "dailies",
+    "epochs",
+    "hrv",
+    "healthSnapshot",
+    "mct",
+    "moveiq",
+    "pulseOx",
+    "respiration",
+    "skinTemp",
+    "sleeps",
+    "stressDetails",
+    "userMetrics"
+  ]
+} as const;
+
 export interface McpDataSource {
   connection(provider: Provider): Promise<ProviderConnection | undefined>;
   events(query: EventQuery): Promise<unknown[]>;
@@ -255,6 +276,7 @@ export interface McpDataSource {
     to: Date,
     resources: string[]
   ): Promise<HistoryRequest>;
+  updateHistory?(id: string, status: "processing" | "completed" | "failed"): Promise<HistoryRequest | undefined>;
 }
 
 function productionDataSource(userId: string): McpDataSource {
@@ -267,7 +289,8 @@ function productionDataSource(userId: string): McpDataSource {
     historyState: (provider, from, to) =>
       historyState({ userId, provider, from, to }),
     requestHistory: (provider, providerUserId, from, to, resources) =>
-      requestHistory({ userId, provider, providerUserId, from, to, resources })
+      requestHistory({ userId, provider, providerUserId, from, to, resources }),
+    updateHistory: updateHistoryRequest
   };
 }
 
@@ -378,6 +401,39 @@ async function apiRead(api: GarminApi, request: GarminApiRequest) {
   }
 }
 
+async function requestGarminBackfill(
+  api: GarminApi,
+  resources: Array<"activities" | "health">,
+  from: Date,
+  to: Date
+) {
+  const query = new URLSearchParams({
+    summaryStartTimeInSeconds: String(Math.floor(from.getTime() / 1000)),
+    summaryEndTimeInSeconds: String(Math.floor(to.getTime() / 1000))
+  });
+  const requests = resources.flatMap((resource) =>
+    GARMIN_BACKFILL_ENDPOINTS[resource].map((summaryType) => ({
+      resource,
+      summaryType,
+      path: `/wellness-api/rest/backfill/${summaryType}?${query}`
+    }))
+  );
+  const results = await Promise.all(
+    requests.map(async (request) => ({
+      resource: request.resource,
+      summaryType: request.summaryType,
+      ...(await apiRead(api, { method: "GET", path: request.path }))
+    }))
+  );
+  return {
+    status: results.some((result) => result.ok) ? "accepted" : "failed",
+    accepted: results.filter((result) => result.ok).map((result) => result.summaryType),
+    failed: results
+      .filter((result) => !result.ok)
+      .map((result) => ({ summaryType: result.summaryType, error: result.error }))
+  };
+}
+
 async function detailedActivities(
   dataSource: McpDataSource,
   connection: ProviderConnection,
@@ -412,19 +468,29 @@ async function buildPeriod(input: {
   include: Array<"activities" | "health" | "calendar">;
 }) {
   const connection = await input.dataSource.connection("garmin");
+  let sync: Awaited<ReturnType<typeof requestGarminBackfill>> | null = null;
   if (connection && input.from < new Date(connection.connectedAt)) {
     const resources = input.include.filter(
       (resource): resource is "activities" | "health" =>
         resource === "activities" || resource === "health"
     );
     if (resources.length > 0) {
-      await input.dataSource.requestHistory(
+      const history = await input.dataSource.requestHistory(
         "garmin",
         connection.providerUserId,
         input.from,
         input.to,
         resources
       );
+      if (history.status === "pending") {
+        sync = await requestGarminBackfill(input.garminApi, resources, input.from, input.to);
+        if (input.dataSource.updateHistory) {
+          await input.dataSource.updateHistory(
+            history.id,
+            sync.status === "accepted" ? "processing" : "failed"
+          );
+        }
+      }
     }
   }
   const coverage = await Promise.all(
@@ -497,6 +563,7 @@ async function buildPeriod(input: {
     planMatches: plan.matches,
     unplannedActivities: plan.unplannedActivities,
     missing,
+    sync,
     provenance: {
       activities: "provider_push_mirror",
       health: "provider_push_mirror",
@@ -514,7 +581,7 @@ export function createEnduranceBridgeMcpServer(
   const providerApi = garminApi ?? createProductionGarminApi(userId);
   const telemetryEnabled = dataSource === undefined;
   const server = new McpServer(
-    { name: "endurance-bridge", version: "1.2.0" },
+    { name: "endurance-bridge", version: "1.2.1" },
     {
       instructions:
         "For requests about training, workouts, sessions, exercise, recovery, or endurance periods, call endurance_get_period directly before considering calendars or unrelated personal-data tools. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
@@ -633,14 +700,6 @@ export function createEnduranceBridgeMcpServer(
         if (["workouts", "calendar", "routes"].includes(resource)) {
           return textResult({ status: "not_required", reason: "resource_is_read_live", coverage });
         }
-        if (range.from >= new Date(connection.connectedAt)) {
-          return textResult({
-            status: "monitoring_active",
-            delivery: "push_mirror",
-            nextAction: "Sync the Garmin device with Garmin Connect; new summaries are delivered automatically.",
-            coverage
-          });
-        }
         const history = await source.requestHistory(
           provider,
           connection.providerUserId,
@@ -648,13 +707,25 @@ export function createEnduranceBridgeMcpServer(
           range.to,
           [resource]
         );
+        const backfill = resource === "activities" || resource === "health"
+          ? await requestGarminBackfill(providerApi, [resource], range.from, range.to)
+          : null;
+        if (source.updateHistory && history.status === "pending" && backfill) {
+          await source.updateHistory(
+            history.id,
+            backfill.status === "accepted" ? "processing" : "failed"
+          );
+        }
         return textResult({
           status: history.status === "completed" ? "ready" : "history_loading",
           message:
             history.status === "completed"
               ? "Historical data is ready."
-              : "Endurance Bridge is preparing this historical range. Retry shortly.",
+              : backfill?.status === "accepted"
+                ? "Garmin accepted the backfill request. Retry this period shortly."
+                : "Garmin backfill could not be started.",
           requestId: history.id,
+          backfill,
           coverage: await coverageFor(
             source,
             provider,
