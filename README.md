@@ -4,13 +4,13 @@ Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
-## Give this repository to Codex
+## Give this repository to Codex or Claude Code
 
 Start from a clean Codex session with:
 
-> Set up https://github.com/rogowoi/endurance-bridge so I can access my Garmin data from Codex.
+> Set up https://github.com/rogowoi/endurance-bridge so I can access my Garmin data from Codex or Claude Code.
 
-The repository's [`AGENTS.md`](./AGENTS.md) contains the complete onboarding contract. Codex will clone and test the project, generate unique installation secrets, deploy a private instance, guide the required Garmin developer configuration and OAuth step, add the resulting MCP endpoint to Codex, and verify it with a live read.
+The repository's [`AGENTS.md`](./AGENTS.md) contains the shared onboarding contract. Codex reads it directly; Claude Code loads it through [`CLAUDE.md`](./CLAUDE.md). Either agent will clone and test the project, generate unique installation secrets, deploy a private instance, guide the required Garmin developer configuration and OAuth step, add the resulting MCP endpoint, and verify it with a live read.
 
 This self-hosted model requires the user to have an approved Garmin Connect Developer Program application. The public repository never contains a shared Garmin secret or bridge API key.
 
