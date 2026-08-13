@@ -64,7 +64,7 @@ export async function exchangeGarminCode(input: {
   }
   const token = (await response.json()) as GarminToken;
   if (!token.access_token) throw new Error("Garmin token response is incomplete");
-  return token;
+  return { ...token, obtained_at: new Date().toISOString() };
 }
 
 async function garminGet<T>(token: GarminToken, path: string): Promise<T> {

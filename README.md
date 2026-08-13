@@ -1,6 +1,6 @@
 # Endurance Bridge
 
-Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport data. Deploy one instance, connect your Garmin account, and give Codex, Claude Code, or another MCP client read-only access with a personal bearer key.
+Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport data. Deploy one instance, connect your Garmin account, and give Codex, Claude Code, or another MCP client full Garmin Training and Courses access with a personal bearer key.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
@@ -10,11 +10,24 @@ Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport
 - Garmin Activity PUSH webhook ingestion
 - Encrypted provider-token storage using AES-256-GCM
 - Bearer-protected Streamable HTTP MCP endpoint
-- Four read-only MCP tools:
+- Seventeen Garmin MCP tools:
   - `garmin_connection_status`
   - `garmin_list_activities`
   - `garmin_get_activity`
   - `garmin_list_events`
+  - `garmin_get_workout`
+  - `garmin_create_workout`
+  - `garmin_update_workout`
+  - `garmin_delete_workout`
+  - `garmin_list_schedules`
+  - `garmin_get_schedule`
+  - `garmin_create_schedule`
+  - `garmin_update_schedule`
+  - `garmin_delete_schedule`
+  - `garmin_get_course`
+  - `garmin_create_course`
+  - `garmin_update_course`
+  - `garmin_delete_course`
 - Codex and Claude Code configuration
 
 Strava and TrainingPeaks are planned adapters. The event model is already provider-neutral.
@@ -26,9 +39,9 @@ This is intentionally single-tenant. There are no Endurance Bridge user accounts
 1. The owner protects setup and MCP access with `BRIDGE_API_KEY`.
 2. Garmin OAuth tokens are encrypted before storage.
 3. Garmin sends activity events to an unguessable webhook URL.
-4. MCP clients can read only the connected owner's stored data.
+4. MCP clients can read the connected owner's stored activity feed and manage Garmin workouts, schedules, and courses.
 
-The MCP server has no write tools. It cannot create, update, delete, schedule, or upload anything to Garmin.
+Every mutation defaults to a dry run. To send it to Garmin, repeat the same tool call with `dryRun: false` and `confirm: "WRITE_TO_GARMIN"`.
 
 ## Deploy
 
@@ -36,7 +49,7 @@ Prerequisites:
 
 - PostgreSQL or Neon database
 - Vercel account
-- Approved Garmin Connect Developer Program application with Activity API access
+- Approved Garmin Connect Developer Program application with Activity, Training, and Courses API access
 
 1. Deploy with the button above or clone this repository.
 2. Apply [`schema.sql`](./schema.sql) to the database.
@@ -125,6 +138,7 @@ pnpm mcp:check
 - Provider tokens are encrypted at rest with a deployment-specific key.
 - The setup APIs and MCP endpoint require `Authorization: Bearer BRIDGE_API_KEY`.
 - Garmin deregistration notifications remove the connected Garmin user's stored events.
+- Garmin write tools default to a no-op preview and require the exact `WRITE_TO_GARMIN` confirmation to execute.
 - Activity, health, route, and routine information should be treated as sensitive personal data.
 
 ## License

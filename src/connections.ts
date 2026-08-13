@@ -11,6 +11,10 @@ export interface ProviderConnection {
   updatedAt: string;
 }
 
+export interface ProviderConnectionSecret extends ProviderConnection {
+  encryptedToken: string;
+}
+
 export async function getConnection(
   provider: Provider
 ): Promise<ProviderConnection | undefined> {
@@ -32,6 +36,44 @@ export async function getConnection(
     connectedAt: new Date(row.connected_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString()
   };
+}
+
+export async function getConnectionSecret(
+  provider: Provider
+): Promise<ProviderConnectionSecret | undefined> {
+  const sql = database();
+  const rows = await sql`
+    SELECT provider, provider_user_id, encrypted_token, permissions,
+           connected_at, updated_at
+    FROM endurance_connection
+    WHERE provider = ${provider}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return undefined;
+  return {
+    provider: row.provider as Provider,
+    providerUserId: String(row.provider_user_id),
+    encryptedToken: String(row.encrypted_token),
+    permissions: Array.isArray(row.permissions)
+      ? row.permissions.map(String)
+      : [],
+    connectedAt: new Date(row.connected_at as string).toISOString(),
+    updatedAt: new Date(row.updated_at as string).toISOString()
+  };
+}
+
+export async function updateConnectionToken(
+  provider: Provider,
+  providerUserId: string,
+  encryptedToken: string
+): Promise<void> {
+  const sql = database();
+  await sql`
+    UPDATE endurance_connection
+    SET encrypted_token = ${encryptedToken}, updated_at = now()
+    WHERE provider = ${provider} AND provider_user_id = ${providerUserId}
+  `;
 }
 
 export async function upsertConnection(input: {
