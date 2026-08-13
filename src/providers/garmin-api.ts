@@ -97,7 +97,10 @@ export function createProductionGarminApi(userId: string): GarminApi {
     }
 
     if (!response.ok) {
-      throw new Error(`Garmin API request failed with HTTP ${response.status}`);
+      const detail = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 240);
+      throw new Error(
+        `Garmin API request failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`
+      );
     }
     return parseResponse(response);
   }
