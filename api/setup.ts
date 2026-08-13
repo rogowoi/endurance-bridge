@@ -18,7 +18,7 @@ const HTML = `<!doctype html>
   </style>
 </head>
 <body><main>
-  <header><h1>Endurance Bridge</h1><p class="lead">Connect one private endurance account to a read-only remote MCP server. Your bridge key stays in this browser session and is never placed in the URL.</p></header>
+  <header><h1>Endurance Bridge</h1><p class="lead">Connect one private endurance account to a remote MCP server with Garmin activities, workouts, schedules, and courses. Your bridge key stays in this browser session and is never placed in the URL.</p></header>
   <section class="card"><h2>1. Unlock setup</h2><label for="key">BRIDGE_API_KEY</label><div class="row"><input id="key" type="password" autocomplete="off" placeholder="Paste your personal bridge key"><button id="unlock">Unlock</button></div><p id="message" class="status"></p></section>
   <section id="providers" class="card hidden"><h2>2. Connect a provider</h2><div class="row"><strong>Garmin</strong><span id="garminStatus" class="status">Not connected</span><button id="garmin">Connect Garmin</button></div><p class="status">Strava and TrainingPeaks adapters are planned. The MCP data model already supports them.</p></section>
   <section id="clients" class="card hidden"><h2>3. Add the MCP</h2><p>Set <code>ENDURANCE_BRIDGE_API_KEY</code> in the client environment, then add the remote endpoint.</p><strong>Codex</strong><pre id="codex"></pre><strong>Claude Code</strong><pre id="claude"></pre></section>

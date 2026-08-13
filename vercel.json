@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/setup"
+    }
+  ],
   "functions": {
     "api/mcp.ts": {
       "maxDuration": 30
