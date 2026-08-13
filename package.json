@@ -1,0 +1,25 @@
+{
+  "name": "endurance-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider-neutral endurance data gateway for Garmin, Strava, and TrainingPeaks.",
+  "scripts": {
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm test && pnpm typecheck"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@vercel/node": "^5.9.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}
