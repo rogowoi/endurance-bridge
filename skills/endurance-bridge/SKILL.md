@@ -34,7 +34,7 @@ Use a narrower tool only when it materially reduces work:
 - Planned training: `endurance_get_calendar`
 - Known routes: `endurance_get_routes`
 
-Read [references/tools.md](references/tools.md) for argument and interpretation details.
+Read [references/tools.md](references/tools.md) only for change payload rules or unexpected schema/status troubleshooting. Do not load it for an ordinary period read.
 
 ## Discuss training
 
