@@ -511,7 +511,7 @@ export function createEnduranceBridgeMcpServer(
     { name: "endurance-bridge", version: "1.1.0" },
     {
       instructions:
-        "Use endurance_get_period directly for discussing today, a recent session, a week, a training block, or a comparison. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
+        "For requests about training, workouts, sessions, exercise, recovery, or endurance periods, call endurance_get_period directly before considering calendars or unrelated personal-data tools. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
     }
   );
 

@@ -25,7 +25,7 @@ test("renders a valid friend-facing onboarding page", () => {
   assert.match(html, /Partner operations/);
   assert.match(html, /History loading/);
   assert.match(html, /12 tools/);
-  assert.match(html, /Discuss my full last week/);
+  assert.match(html, /Review my training from last week/);
   assert.match(html, /launchctl setenv ENDURANCE_BRIDGE_API_KEY/);
   assert.match(html, /fully quit Codex with ⌘Q/);
 

@@ -126,7 +126,7 @@ codex mcp add endurance-bridge \
   --bearer-token-env-var ENDURANCE_BRIDGE_API_KEY
 ```
 
-Fully quit Codex with **Codex → Quit Codex** or `⌘Q`, reopen it, and start a clean task. Ask: **“Check my endurance providers and discuss my full last week.”**
+Fully quit Codex with **Codex → Quit Codex** or `⌘Q`, reopen it, and start a clean task. Ask: **“Review my training from last week.”**
 
 For CLI-only use, export the key in the shell that launches Codex. After restarting macOS, set the `launchctl` value again before opening the desktop app.
 

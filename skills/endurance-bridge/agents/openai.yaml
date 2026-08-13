@@ -1,7 +1,7 @@
 interface:
   display_name: "Endurance Bridge"
   short_description: "Connect and use endurance data through MCP"
-  default_prompt: "Use $endurance-bridge to connect my providers, verify the MCP, and discuss my training data."
+  default_prompt: "Use $endurance-bridge to review my training from last week."
 dependencies:
   tools:
     - type: "mcp"
