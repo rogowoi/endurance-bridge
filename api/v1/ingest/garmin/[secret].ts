@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+import {
+  deleteConnection,
+  updateConnectionPermissions
+} from "../../../../src/connections.js";
 import { normalizeGarminPayload } from "../../../../src/providers/garmin.js";
 import { secureEquals } from "../../../../src/security.js";
 import { deleteProviderUser, upsertEvents } from "../../../../src/store.js";
@@ -39,6 +43,19 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   for (const userId of normalized.deregisteredUserIds) {
     await deleteProviderUser("garmin", userId);
+    await deleteConnection("garmin", userId);
+  }
+  for (const event of normalized.events) {
+    if (
+      event.eventType === "userPermissionsChange" &&
+      Array.isArray(event.payload.permissions)
+    ) {
+      await updateConnectionPermissions(
+        "garmin",
+        event.providerUserId,
+        event.payload.permissions.map(String)
+      );
+    }
   }
   await upsertEvents(normalized.events);
 

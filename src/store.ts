@@ -1,14 +1,7 @@
 import crypto from "node:crypto";
 
-import { neon } from "@neondatabase/serverless";
-
+import { database } from "./database.js";
 import type { EnduranceEvent, Provider } from "./types.js";
-
-function database() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not configured");
-  return neon(url);
-}
 
 export async function upsertEvents(events: EnduranceEvent[]): Promise<void> {
   const sql = database();
@@ -104,5 +97,58 @@ export async function queryEvents(query: EventQuery) {
           ORDER BY started_at ASC NULLS LAST, received_at ASC
           LIMIT ${query.limit}
         `;
+  return rows;
+}
+
+export async function queryGarminActivities(
+  providerUserId: string,
+  from: Date | undefined,
+  to: Date | undefined,
+  limit: number
+) {
+  const sql = database();
+  return from && to
+    ? sql`
+        SELECT provider, provider_user_id, event_type, external_id,
+               started_at, occurred_on, payload, received_at
+        FROM endurance_event
+        WHERE provider = 'garmin'
+          AND provider_user_id = ${providerUserId}
+          AND event_type IN ('activities', 'manuallyUpdatedActivities')
+          AND started_at >= ${from.toISOString()}
+          AND started_at < ${to.toISOString()}
+        ORDER BY started_at DESC, received_at DESC
+        LIMIT ${limit}
+      `
+    : sql`
+        SELECT provider, provider_user_id, event_type, external_id,
+               started_at, occurred_on, payload, received_at
+        FROM endurance_event
+        WHERE provider = 'garmin'
+          AND provider_user_id = ${providerUserId}
+          AND event_type IN ('activities', 'manuallyUpdatedActivities')
+        ORDER BY started_at DESC, received_at DESC
+        LIMIT ${limit}
+      `;
+}
+
+export async function queryGarminActivity(
+  providerUserId: string,
+  externalId: string
+) {
+  const sql = database();
+  const rows = await sql`
+    SELECT provider, provider_user_id, event_type, external_id,
+           started_at, occurred_on, payload, received_at
+    FROM endurance_event
+    WHERE provider = 'garmin'
+      AND provider_user_id = ${providerUserId}
+      AND external_id = ${externalId}
+      AND event_type IN (
+        'activities', 'activityDetails', 'manuallyUpdatedActivities'
+      )
+    ORDER BY CASE WHEN event_type = 'activityDetails' THEN 0 ELSE 1 END,
+             received_at DESC
+  `;
   return rows;
 }
