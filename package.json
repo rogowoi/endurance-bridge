@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Provider-neutral endurance data gateway for Garmin, Strava, and TrainingPeaks.",
   "scripts": {
+    "bootstrap": "tsx scripts/bootstrap.ts",
     "test": "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "pnpm test && pnpm typecheck",

@@ -4,6 +4,16 @@ Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
+## Give this repository to Codex
+
+Start from a clean Codex session with:
+
+> Set up https://github.com/rogowoi/endurance-bridge so I can access my Garmin data from Codex.
+
+The repository's [`AGENTS.md`](./AGENTS.md) contains the complete onboarding contract. Codex will clone and test the project, generate unique installation secrets, deploy a private instance, guide the required Garmin developer configuration and OAuth step, add the resulting MCP endpoint to Codex, and verify it with a live read.
+
+This self-hosted model requires the user to have an approved Garmin Connect Developer Program application. The public repository never contains a shared Garmin secret or bridge API key.
+
 ## What works
 
 - Garmin OAuth 2.0 PKCE connection from a private setup page
@@ -52,8 +62,9 @@ Prerequisites:
 - Approved Garmin Connect Developer Program application with Activity, Training, and Courses API access
 
 1. Deploy with the button above or clone this repository.
-2. Apply [`schema.sql`](./schema.sql) to the database.
-3. Configure these environment variables:
+2. Run `pnpm bootstrap` to create `.env.local` with unique generated secrets, then add the database and Garmin credentials.
+3. Apply [`schema.sql`](./schema.sql) to the database.
+4. Configure these environment variables:
 
 | Variable | Purpose |
 | --- | --- |
@@ -72,13 +83,13 @@ openssl rand -hex 32       # BRIDGE_API_KEY and GARMIN_WEBHOOK_SECRET
 openssl rand -base64 32    # CONNECTION_ENCRYPTION_KEY
 ```
 
-4. Register this exact Garmin OAuth callback:
+5. Register this exact Garmin OAuth callback:
 
 ```text
 https://YOUR_ORIGIN/api/v1/setup/garmin/callback
 ```
 
-5. Configure Garmin Activity summaries as PUSH notifications to:
+6. Configure Garmin Activity summaries as PUSH notifications to:
 
 ```text
 https://YOUR_ORIGIN/api/v1/ingest/garmin/GARMIN_WEBHOOK_SECRET
@@ -86,11 +97,11 @@ https://YOUR_ORIGIN/api/v1/ingest/garmin/GARMIN_WEBHOOK_SECRET
 
 Enable `activities`, `activityDetails`, `manuallyUpdatedActivities`, `deregistrations`, and `userPermissionsChange`.
 
-6. Open `https://YOUR_ORIGIN/api/setup`, enter `BRIDGE_API_KEY`, and select **Connect Garmin**.
+7. Open `https://YOUR_ORIGIN/`, enter `BRIDGE_API_KEY`, and select **Connect Garmin**.
 
 ## Add to Codex
 
-Codex supports remote Streamable HTTP MCP servers with bearer tokens. Put the personal key in the environment and register the endpoint:
+Each deployment has a different origin and bridge key, so Codex registers the MCP after deployment:
 
 ```bash
 export ENDURANCE_BRIDGE_API_KEY='your-bridge-key'
