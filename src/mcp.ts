@@ -407,30 +407,62 @@ async function requestGarminBackfill(
   from: Date,
   to: Date
 ) {
-  const query = new URLSearchParams({
-    summaryStartTimeInSeconds: String(Math.floor(from.getTime() / 1000)),
-    summaryEndTimeInSeconds: String(Math.floor(to.getTime() / 1000))
-  });
+  const effectiveTo = new Date(Math.min(to.getTime(), Date.now()));
+  const ranges: Array<{ from: Date; to: Date }> = [];
+  for (let cursor = from.getTime(); cursor < effectiveTo.getTime();) {
+    const next = Math.min(cursor + 24 * 60 * 60 * 1000, effectiveTo.getTime());
+    ranges.push({ from: new Date(cursor), to: new Date(next) });
+    cursor = next;
+  }
   const requests = resources.flatMap((resource) =>
-    GARMIN_BACKFILL_ENDPOINTS[resource].map((summaryType) => ({
-      resource,
-      summaryType,
-      path: `/wellness-api/rest/backfill/${summaryType}?${query}`
-    }))
+    GARMIN_BACKFILL_ENDPOINTS[resource].flatMap((summaryType) =>
+      ranges.map((range) => {
+        const query = new URLSearchParams({
+          summaryStartTimeInSeconds: String(Math.floor(range.from.getTime() / 1000)),
+          summaryEndTimeInSeconds: String(Math.floor(range.to.getTime() / 1000))
+        });
+        return {
+          resource,
+          summaryType,
+          from: range.from.toISOString(),
+          to: range.to.toISOString(),
+          path: `/wellness-api/rest/backfill/${summaryType}?${query}`
+        };
+      })
+    )
   );
-  const results = await Promise.all(
-    requests.map(async (request) => ({
-      resource: request.resource,
-      summaryType: request.summaryType,
-      ...(await apiRead(api, { method: "GET", path: request.path }))
-    }))
-  );
+  const results: Array<{
+    resource: "activities" | "health";
+    summaryType: string;
+    from: string;
+    to: string;
+    ok: boolean;
+    result?: unknown;
+    error?: string;
+  }> = [];
+  for (let index = 0; index < requests.length; index += 8) {
+    results.push(...await Promise.all(
+      requests.slice(index, index + 8).map(async (request) => ({
+        resource: request.resource,
+        summaryType: request.summaryType,
+        from: request.from,
+        to: request.to,
+        ...(await apiRead(api, { method: "GET", path: request.path }))
+      }))
+    ));
+  }
+  const accepted = results.filter((result) => result.ok);
+  const failed = results.filter((result) => !result.ok);
   return {
-    status: results.some((result) => result.ok) ? "accepted" : "failed",
-    accepted: results.filter((result) => result.ok).map((result) => result.summaryType),
-    failed: results
-      .filter((result) => !result.ok)
-      .map((result) => ({ summaryType: result.summaryType, error: result.error }))
+    status: accepted.length === 0 ? "failed" : failed.length > 0 ? "partial" : "accepted",
+    acceptedRequests: accepted.length,
+    acceptedTypes: [...new Set(accepted.map((result) => result.summaryType))],
+    failed: failed.map((result) => ({
+      summaryType: result.summaryType,
+      from: result.from,
+      to: result.to,
+      error: result.error
+    }))
   };
 }
 
@@ -487,7 +519,7 @@ async function buildPeriod(input: {
         if (input.dataSource.updateHistory) {
           await input.dataSource.updateHistory(
             history.id,
-            sync.status === "accepted" ? "processing" : "failed"
+            sync.status !== "failed" ? "processing" : "failed"
           );
         }
       }
@@ -713,7 +745,7 @@ export function createEnduranceBridgeMcpServer(
         if (source.updateHistory && history.status === "pending" && backfill) {
           await source.updateHistory(
             history.id,
-            backfill.status === "accepted" ? "processing" : "failed"
+            backfill.status !== "failed" ? "processing" : "failed"
           );
         }
         return textResult({
@@ -721,7 +753,7 @@ export function createEnduranceBridgeMcpServer(
           message:
             history.status === "completed"
               ? "Historical data is ready."
-              : backfill?.status === "accepted"
+              : backfill?.status !== "failed"
                 ? "Garmin accepted the backfill request. Retry this period shortly."
                 : "Garmin backfill could not be started.",
           requestId: history.id,
