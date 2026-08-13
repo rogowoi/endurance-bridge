@@ -33,6 +33,7 @@ Use a narrower tool only when it materially reduces work:
 - Known workouts: `endurance_get_workouts`
 - Planned training: `endurance_get_calendar`
 - Known routes: `endurance_get_routes`
+- Owner-only adoption and reliability monitoring: `endurance_get_usage_report`
 
 Read [references/tools.md](references/tools.md) only for change payload rules or unexpected schema/status troubleshooting. Do not load it for an ordinary period read.
 

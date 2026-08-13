@@ -4,7 +4,7 @@ export default function handler(_request: VercelRequest, response: VercelRespons
   response.status(200).json({
     ok: true,
     service: "endurance-bridge",
-    version: "1.1.0",
+    version: "1.2.0",
     mcp: "active",
     providers: { garmin: "active" }
   });

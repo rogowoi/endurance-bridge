@@ -48,6 +48,7 @@ The public contract is provider-neutral and intentionally small:
 | `endurance_get_routes` | Fetch routes by provider ID |
 | `endurance_prepare_change` | Validate and preview a workout, calendar, or route mutation |
 | `endurance_apply_change` | Apply one approved, unexpired prepared change |
+| `endurance_get_usage_report` | Owner-only operational usage, reliability, and latency report |
 
 There are no public `garmin_*` tools. Provider-specific endpoints and payload rules live behind this contract.
 
@@ -163,6 +164,8 @@ pnpm mcp:check
 - Never commit environment files, provider secrets, OAuth tokens, activity exports, or personal MCP keys.
 - Callback URLs and token-like fields are removed recursively before event storage.
 - Account data is always scoped by user ID.
+- Usage telemetry stores tool intent, date ranges, outcome states, and latency; it never stores training payloads, resource IDs, credentials, or original prompt text.
+- Owners can call `endurance_get_usage_report` to monitor adoption and reliability for the previous 1–90 days.
 - Treat health, activity, location, route, and routine data as sensitive.
 - `endurance_prepare_change` performs no provider mutation.
 - Apply only the exact preview the user just approved, using `endurance_apply_change` with `confirm: "APPLY_ENDURANCE_CHANGE"`.

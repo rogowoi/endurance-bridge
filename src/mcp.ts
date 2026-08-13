@@ -35,6 +35,11 @@ import {
   queryProviderEventCoverage
 } from "./store.js";
 import type { Provider } from "./types.js";
+import {
+  isOwnerUser,
+  recordToolUsage,
+  usageReport
+} from "./usage.js";
 
 const PROVIDERS = ["garmin"] as const;
 const RESOURCES = ["activities", "health", "workouts", "calendar", "routes"] as const;
@@ -507,15 +512,60 @@ export function createEnduranceBridgeMcpServer(
 ) {
   const source = dataSource ?? productionDataSource(userId);
   const providerApi = garminApi ?? createProductionGarminApi(userId);
+  const telemetryEnabled = dataSource === undefined;
   const server = new McpServer(
-    { name: "endurance-bridge", version: "1.1.0" },
+    { name: "endurance-bridge", version: "1.2.0" },
     {
       instructions:
         "For requests about training, workouts, sessions, exercise, recovery, or endurance periods, call endurance_get_period directly before considering calendars or unrelated personal-data tools. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
     }
   );
 
-  server.registerTool(
+  const originalRegisterTool = server.registerTool.bind(server);
+  const registerTool = (
+    name: string,
+    config: unknown,
+    handler: (input: any) => Promise<any>
+  ) => (originalRegisterTool as any)(
+    name,
+    config,
+    async (input: any) => {
+      const started = Date.now();
+      try {
+        const result = await handler(input);
+        const structured = result.structuredContent as Record<string, unknown> | undefined;
+        const primary = structured?.primary as Record<string, unknown> | undefined;
+        const resultStatus = String(
+          primary?.status ?? structured?.status ?? (result.isError ? "error" : "success")
+        );
+        if (telemetryEnabled) {
+          await recordToolUsage({
+            userId,
+            toolName: name,
+            request: input,
+            outcome: result.isError ? "error" : "success",
+            resultStatus,
+            durationMs: Date.now() - started
+          }).catch(() => undefined);
+        }
+        return result;
+      } catch (error) {
+        if (telemetryEnabled) {
+          await recordToolUsage({
+            userId,
+            toolName: name,
+            request: input,
+            outcome: "error",
+            resultStatus: "exception",
+            durationMs: Date.now() - started
+          }).catch(() => undefined);
+        }
+        throw error;
+      }
+    }
+  );
+
+  registerTool(
     "endurance_get_capabilities",
     {
       title: "Get endurance provider capabilities",
@@ -535,7 +585,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_coverage",
     {
       title: "Get endurance data coverage",
@@ -561,7 +611,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_sync",
     {
       title: "Synchronize endurance data",
@@ -620,7 +670,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_period",
     {
       title: "Get a complete endurance training period",
@@ -664,7 +714,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_list_activities",
     {
       title: "List endurance activities",
@@ -708,7 +758,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_activity",
     {
       title: "Get an endurance activity",
@@ -739,7 +789,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_health",
     {
       title: "Get endurance health and recovery data",
@@ -778,7 +828,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_workouts",
     {
       title: "Get endurance workouts",
@@ -795,7 +845,7 @@ export function createEnduranceBridgeMcpServer(
         return textResult({ status: "unavailable", provider, workouts: [] });
       }
       const workouts = await Promise.all(
-        workoutIds.map(async (workoutId) => ({
+        workoutIds.map(async (workoutId: string | number) => ({
           id: `${provider}:${workoutId}`,
           provider,
           sourceId: String(workoutId),
@@ -809,7 +859,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_calendar",
     {
       title: "Get endurance training calendar",
@@ -858,7 +908,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_get_routes",
     {
       title: "Get endurance routes",
@@ -875,7 +925,7 @@ export function createEnduranceBridgeMcpServer(
         return textResult({ status: "unavailable", provider, routes: [] });
       }
       const routes = await Promise.all(
-        routeIds.map(async (routeId) => ({
+        routeIds.map(async (routeId: string | number) => ({
           id: `${provider}:${routeId}`,
           provider,
           sourceId: String(routeId),
@@ -889,7 +939,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_prepare_change",
     {
       title: "Prepare an endurance change",
@@ -939,7 +989,7 @@ export function createEnduranceBridgeMcpServer(
     }
   );
 
-  server.registerTool(
+  registerTool(
     "endurance_apply_change",
     {
       title: "Apply a prepared endurance change",
@@ -975,6 +1025,22 @@ export function createEnduranceBridgeMcpServer(
       } catch (error) {
         return errorResult(error instanceof Error ? error.message : "Change failed");
       }
+    }
+  );
+
+  registerTool(
+    "endurance_get_usage_report",
+    {
+      title: "Get Endurance Bridge usage report",
+      description: "Owner-only operational report of active users, tool intent, result states, latency, and recent problems. Does not contain training payloads, credentials, or original natural-language prompts.",
+      inputSchema: z.object({
+        days: z.number().int().min(1).max(90).default(7)
+      }),
+      annotations: READ_ONLY
+    },
+    async ({ days }) => {
+      if (!(await isOwnerUser(userId))) return errorResult("Owner access required");
+      return textResult(await usageReport(days));
     }
   );
 

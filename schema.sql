@@ -149,3 +149,20 @@ WHERE c.provider = 'garmin'
       AND r.provider = c.provider
       AND r.status IN ('pending', 'processing', 'completed')
   );
+
+CREATE TABLE IF NOT EXISTS endurance_usage_event (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES endurance_user(id) ON DELETE CASCADE,
+  tool_name text NOT NULL,
+  request_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  outcome text NOT NULL,
+  result_status text,
+  duration_ms integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS endurance_usage_event_created_idx
+  ON endurance_usage_event (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS endurance_usage_event_user_created_idx
+  ON endurance_usage_event (user_id, created_at DESC);

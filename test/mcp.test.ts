@@ -140,6 +140,7 @@ test("exposes only the provider-neutral endurance tool surface", async () => {
       "endurance_get_health",
       "endurance_get_period",
       "endurance_get_routes",
+      "endurance_get_usage_report",
       "endurance_get_workouts",
       "endurance_list_activities",
       "endurance_prepare_change",
