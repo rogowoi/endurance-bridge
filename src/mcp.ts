@@ -318,6 +318,10 @@ function providerCapabilities(
     connected: Boolean(connection),
     connectedAt: connection?.connectedAt ?? null,
     permissions: connection?.permissions ?? [],
+    historicalDataExport: {
+      available: Boolean(connection) && granted.has("HISTORICAL_DATA_EXPORT"),
+      permission: "HISTORICAL_DATA_EXPORT"
+    },
     resources: {
       activities: resource("ACTIVITY_EXPORT", "push_mirror", ["list", "get", "period"]),
       health: resource("HEALTH_EXPORT", "push_mirror", ["query", "period"]),
@@ -466,6 +470,16 @@ async function requestGarminBackfill(
   };
 }
 
+function historicalAccessRequired() {
+  return {
+    status: "historical_access_required" as const,
+    reason: "HISTORICAL_DATA_EXPORT is not granted to this Garmin developer application",
+    acceptedRequests: 0,
+    acceptedTypes: [] as string[],
+    failed: [] as Array<{ summaryType: string; from: string; to: string; error?: string }>
+  };
+}
+
 async function detailedActivities(
   dataSource: McpDataSource,
   connection: ProviderConnection,
@@ -500,7 +514,10 @@ async function buildPeriod(input: {
   include: Array<"activities" | "health" | "calendar">;
 }) {
   const connection = await input.dataSource.connection("garmin");
-  let sync: Awaited<ReturnType<typeof requestGarminBackfill>> | null = null;
+  let sync:
+    | Awaited<ReturnType<typeof requestGarminBackfill>>
+    | ReturnType<typeof historicalAccessRequired>
+    | null = null;
   if (connection && input.from < new Date(connection.connectedAt)) {
     const resources = input.include.filter(
       (resource): resource is "activities" | "health" =>
@@ -515,11 +532,15 @@ async function buildPeriod(input: {
         resources
       );
       if (history.status === "pending") {
-        sync = await requestGarminBackfill(input.garminApi, resources, input.from, input.to);
+        sync = connection.permissions.includes("HISTORICAL_DATA_EXPORT")
+          ? await requestGarminBackfill(input.garminApi, resources, input.from, input.to)
+          : historicalAccessRequired();
         if (input.dataSource.updateHistory) {
           await input.dataSource.updateHistory(
             history.id,
-            sync.status !== "failed" ? "processing" : "failed"
+            sync.status === "accepted" || sync.status === "partial"
+              ? "processing"
+              : "failed"
           );
         }
       }
@@ -581,6 +602,8 @@ async function buildPeriod(input: {
     status: loading ? "history_loading" : partial ? "partial" : "ready",
     userMessage: loading
       ? "Recent Garmin history is being prepared by Endurance Bridge. New sessions are live now; retry this period shortly."
+      : sync?.status === "historical_access_required"
+        ? "This Garmin app can receive new data, but Garmin has not granted Historical Data Export for older periods."
       : null,
     period: {
       from: input.from.toISOString(),
@@ -613,10 +636,10 @@ export function createEnduranceBridgeMcpServer(
   const providerApi = garminApi ?? createProductionGarminApi(userId);
   const telemetryEnabled = dataSource === undefined;
   const server = new McpServer(
-    { name: "endurance-bridge", version: "1.2.1" },
+    { name: "endurance-bridge", version: "1.2.2" },
     {
       instructions:
-        "For requests about training, workouts, sessions, exercise, recovery, or endurance periods, call endurance_get_period directly before considering calendars or unrelated personal-data tools. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
+        "For requests about training, workouts, sessions, exercise, recovery, or endurance periods, call endurance_get_period directly before considering calendars or unrelated personal-data tools. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly. If status is historical_access_required, explain that new Garmin data is live but older history requires Garmin to approve Historical Data Export for the developer app; do not keep retrying or send the user to developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
     }
   );
 
@@ -740,20 +763,30 @@ export function createEnduranceBridgeMcpServer(
           [resource]
         );
         const backfill = resource === "activities" || resource === "health"
-          ? await requestGarminBackfill(providerApi, [resource], range.from, range.to)
+          ? connection.permissions.includes("HISTORICAL_DATA_EXPORT")
+            ? await requestGarminBackfill(providerApi, [resource], range.from, range.to)
+            : historicalAccessRequired()
           : null;
         if (source.updateHistory && history.status === "pending" && backfill) {
           await source.updateHistory(
             history.id,
-            backfill.status !== "failed" ? "processing" : "failed"
+            backfill.status === "accepted" || backfill.status === "partial"
+              ? "processing"
+              : "failed"
           );
         }
         return textResult({
-          status: history.status === "completed" ? "ready" : "history_loading",
+          status: history.status === "completed"
+            ? "ready"
+            : backfill?.status === "historical_access_required"
+              ? "historical_access_required"
+              : "history_loading",
           message:
             history.status === "completed"
               ? "Historical data is ready."
-              : backfill?.status !== "failed"
+              : backfill?.status === "historical_access_required"
+                ? "This Garmin developer application is not approved for Historical Data Export. New summaries remain live, but older data cannot be recovered through the API yet."
+              : backfill?.status === "accepted" || backfill?.status === "partial"
                 ? "Garmin accepted the backfill request. Retry this period shortly."
                 : "Garmin backfill could not be started.",
           requestId: history.id,

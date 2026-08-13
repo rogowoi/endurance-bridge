@@ -64,7 +64,7 @@ The default tool for training discussion is `endurance_get_period`:
 
 Every period response contains deterministic totals, source provenance, and coverage. A partial result is never interpreted as zero training.
 
-For a newly connected Garmin account, new Activity and Health data can be queried immediately. The bridge also creates an owner-managed history request during onboarding. Invited users see a simple loading state while the operator prepares recent history; they are never sent to Garmin developer tooling. Calendar, workout, and route operations call Garmin live.
+For a newly connected Garmin account, new Activity and Health data is received through Garmin push endpoints. Older data is requested through Garmin's backfill API when the application has `HISTORICAL_DATA_EXPORT`; otherwise the MCP reports that missing approval explicitly. Calendar, workout, and route operations call Garmin live.
 
 ## Architecture
 
@@ -166,6 +166,7 @@ pnpm mcp:check
 - Account data is always scoped by user ID.
 - Usage telemetry stores tool intent, date ranges, outcome states, and latency; it never stores training payloads, resource IDs, credentials, or original prompt text.
 - Owners can call `endurance_get_usage_report` to monitor adoption and reliability for the previous 1–90 days.
+- Garmin history backfill requires Garmin to grant `HISTORICAL_DATA_EXPORT`; evaluation apps can still receive all newly synced data through configured push endpoints.
 - Treat health, activity, location, route, and routine data as sensitive.
 - `endurance_prepare_change` performs no provider mutation.
 - Apply only the exact preview the user just approved, using `endurance_apply_change` with `confirm: "APPLY_ENDURANCE_CHANGE"`.

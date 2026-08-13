@@ -62,5 +62,6 @@ Do not reuse a token or approval for another operation. Do not mutate provider d
 - Provider not connected: return to the dashboard and authorize it.
 - Permission missing: reconnect and verify the required provider product or scope.
 - `history_loading`: say Endurance Bridge is preparing recent history and retry shortly. Never send the user to provider developer tooling.
+- `historical_access_required`: explain that new Garmin pushes are live, but older history needs Garmin approval for Historical Data Export. Do not keep retrying.
 
 Treat live MCP schemas as the argument authority. Execute available reads and carry freshly approved changes through to a verified result.

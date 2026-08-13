@@ -22,6 +22,7 @@ function dataSource(): McpDataSource {
         permissions: [
           "ACTIVITY_EXPORT",
           "HEALTH_EXPORT",
+          "HISTORICAL_DATA_EXPORT",
           "WORKOUT_IMPORT",
           "COURSE_IMPORT"
         ],
@@ -241,6 +242,35 @@ test("queues historical coverage without exposing developer tooling", async () =
     true
   );
   assert.doesNotMatch(JSON.stringify(sync.structuredContent), /Summary Resender|apis\.garmin/);
+  await client.close();
+  await server.close();
+});
+
+test("reports missing Garmin historical access without retrying a doomed backfill", async () => {
+  const source = dataSource();
+  source.connection = async () => ({
+    provider: "garmin",
+    providerUserId: "garmin-user",
+    permissions: ["ACTIVITY_EXPORT", "HEALTH_EXPORT"],
+    connectedAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z"
+  });
+  const recorded = recordingApi();
+  const { client, server } = await connectedClient(source, recorded.api);
+  const result = await client.callTool({
+    name: "endurance_sync",
+    arguments: {
+      provider: "garmin",
+      resource: "activities",
+      from: "2026-07-20T00:00:00.000Z",
+      to: "2026-07-21T00:00:00.000Z"
+    }
+  });
+  assert.equal(
+    (result.structuredContent as { status: string }).status,
+    "historical_access_required"
+  );
+  assert.equal(recorded.requests.length, 0);
   await client.close();
   await server.close();
 });
