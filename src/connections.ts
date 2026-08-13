@@ -16,13 +16,14 @@ export interface ProviderConnectionSecret extends ProviderConnection {
 }
 
 export async function getConnection(
+  userId: string,
   provider: Provider
 ): Promise<ProviderConnection | undefined> {
   const sql = database();
   const rows = await sql`
     SELECT provider, provider_user_id, permissions, connected_at, updated_at
     FROM endurance_connection
-    WHERE provider = ${provider}
+    WHERE user_id = ${userId} AND provider = ${provider}
     LIMIT 1
   `;
   const row = rows[0];
@@ -39,6 +40,7 @@ export async function getConnection(
 }
 
 export async function getConnectionSecret(
+  userId: string,
   provider: Provider
 ): Promise<ProviderConnectionSecret | undefined> {
   const sql = database();
@@ -46,7 +48,7 @@ export async function getConnectionSecret(
     SELECT provider, provider_user_id, encrypted_token, permissions,
            connected_at, updated_at
     FROM endurance_connection
-    WHERE provider = ${provider}
+    WHERE user_id = ${userId} AND provider = ${provider}
     LIMIT 1
   `;
   const row = rows[0];
@@ -64,6 +66,7 @@ export async function getConnectionSecret(
 }
 
 export async function updateConnectionToken(
+  userId: string,
   provider: Provider,
   providerUserId: string,
   encryptedToken: string
@@ -72,26 +75,31 @@ export async function updateConnectionToken(
   await sql`
     UPDATE endurance_connection
     SET encrypted_token = ${encryptedToken}, updated_at = now()
-    WHERE provider = ${provider} AND provider_user_id = ${providerUserId}
+    WHERE user_id = ${userId} AND provider = ${provider}
+      AND provider_user_id = ${providerUserId}
   `;
 }
 
 export async function upsertConnection(input: {
+  userId: string;
   provider: Provider;
   providerUserId: string;
   encryptedToken: string;
   permissions: string[];
 }): Promise<void> {
   const sql = database();
-  const id = crypto.createHash("sha256").update(input.provider).digest("hex");
+  const id = crypto
+    .createHash("sha256")
+    .update(`${input.userId}:${input.provider}`)
+    .digest("hex");
   await sql`
     INSERT INTO endurance_connection (
-      id, provider, provider_user_id, encrypted_token, permissions
+      id, user_id, provider, provider_user_id, encrypted_token, permissions
     ) VALUES (
-      ${id}, ${input.provider}, ${input.providerUserId},
+      ${id}, ${input.userId}, ${input.provider}, ${input.providerUserId},
       ${input.encryptedToken}, ${JSON.stringify(input.permissions)}::jsonb
     )
-    ON CONFLICT (provider)
+    ON CONFLICT (user_id, provider)
     DO UPDATE SET
       provider_user_id = EXCLUDED.provider_user_id,
       encrypted_token = EXCLUDED.encrypted_token,
@@ -125,6 +133,7 @@ export async function deleteConnection(
 }
 
 export async function createOAuthState(input: {
+  userId: string;
   state: string;
   provider: Provider;
   encryptedVerifier: string;
@@ -137,15 +146,16 @@ export async function createOAuthState(input: {
   `;
   await sql`
     INSERT INTO endurance_oauth_state (
-      state_hash, provider, encrypted_verifier, redirect_uri, expires_at
+      state_hash, user_id, provider, encrypted_verifier, redirect_uri, expires_at
     ) VALUES (
-      ${stateHash}, ${input.provider}, ${input.encryptedVerifier},
+      ${stateHash}, ${input.userId}, ${input.provider}, ${input.encryptedVerifier},
       ${input.redirectUri}, now() + interval '10 minutes'
     )
   `;
 }
 
 export async function consumeOAuthState(state: string): Promise<{
+  userId: string;
   provider: Provider;
   encryptedVerifier: string;
   redirectUri: string;
@@ -155,11 +165,12 @@ export async function consumeOAuthState(state: string): Promise<{
   const rows = await sql`
     DELETE FROM endurance_oauth_state
     WHERE state_hash = ${stateHash} AND expires_at >= now()
-    RETURNING provider, encrypted_verifier, redirect_uri
+    RETURNING user_id, provider, encrypted_verifier, redirect_uri
   `;
   const row = rows[0];
   if (!row) return undefined;
   return {
+    userId: String(row.user_id),
     provider: row.provider as Provider,
     encryptedVerifier: String(row.encrypted_verifier),
     redirectUri: String(row.redirect_uri)

@@ -77,9 +77,10 @@ async function send(token: GarminToken, input: GarminApiRequest): Promise<Respon
   });
 }
 
-export const productionGarminApi: GarminApi = {
+export function createProductionGarminApi(userId: string): GarminApi {
+  return {
   async request(input) {
-    const connection = await getConnectionSecret("garmin");
+    const connection = await getConnectionSecret(userId, "garmin");
     if (!connection) throw new Error("Garmin is not connected");
     let token = decryptJson<GarminToken>(connection.encryptedToken);
     let response = await send(token, input);
@@ -87,6 +88,7 @@ export const productionGarminApi: GarminApi = {
     if (response.status === 401) {
       token = await refreshToken(token);
       await updateConnectionToken(
+        userId,
         "garmin",
         connection.providerUserId,
         encryptJson(token)
@@ -99,4 +101,5 @@ export const productionGarminApi: GarminApi = {
     }
     return parseResponse(response);
   }
-};
+  };
+}

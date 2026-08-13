@@ -12,7 +12,7 @@ function single(value: string | string[] | undefined): string | undefined {
 }
 
 function page(title: string, message: string, ok: boolean) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:16px system-ui;max-width:620px;margin:80px auto;padding:24px;color:#17211b}main{border:1px solid #dce4df;border-radius:18px;padding:32px}h1{color:${ok ? "#146c43" : "#a62929"}}a{color:#176b4d}</style></head><body><main><h1>${title}</h1><p>${message}</p><p><a href="/api/setup">Return to Endurance Bridge setup</a></p></main></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:16px system-ui;max-width:620px;margin:80px auto;padding:24px;color:#17211b}main{border:1px solid #dce4df;border-radius:18px;padding:32px}h1{color:${ok ? "#146c43" : "#a62929"}}a{color:#176b4d}</style></head><body><main><h1>${title}</h1><p>${message}</p><p><a href="/">Continue in Endurance Bridge</a></p></main></body></html>`;
 }
 
 export default async function handler(
@@ -39,6 +39,7 @@ export default async function handler(
     const token = await exchangeGarminCode({ code, verifier, redirectUri: stored.redirectUri });
     const connection = await inspectGarminConnection(token);
     await upsertConnection({
+      userId: stored.userId,
       provider: "garmin",
       providerUserId: connection.providerUserId,
       encryptedToken: encryptJson(token),
@@ -46,7 +47,7 @@ export default async function handler(
     });
     return response
       .status(200)
-      .send(page("Garmin connected", "Your Garmin account is ready for the Endurance Bridge MCP.", true));
+      .send(page("Garmin connected", "Your Garmin account is ready. Return to Endurance Bridge to add it to Codex or Claude.", true));
   } catch {
     return response
       .status(400)

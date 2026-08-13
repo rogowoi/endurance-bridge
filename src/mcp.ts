@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getConnection, type ProviderConnection } from "./connections.js";
 import {
-  productionGarminApi,
+  createProductionGarminApi,
   type GarminApi,
   type GarminApiRequest
 } from "./providers/garmin-api.js";
@@ -134,12 +134,14 @@ export interface McpDataSource {
   activity(providerUserId: string, externalId: string): Promise<unknown[]>;
 }
 
-const productionDataSource: McpDataSource = {
-  connection: getConnection,
-  events: queryEvents,
-  activities: queryGarminActivities,
-  activity: queryGarminActivity
-};
+function productionDataSource(userId: string): McpDataSource {
+  return {
+    connection: (provider) => getConnection(userId, provider),
+    events: queryEvents,
+    activities: queryGarminActivities,
+    activity: queryGarminActivity
+  };
+}
 
 async function liveRead(api: GarminApi, request: GarminApiRequest) {
   try {
@@ -186,9 +188,12 @@ async function writeGarmin(input: {
 }
 
 export function createEnduranceBridgeMcpServer(
-  dataSource: McpDataSource = productionDataSource,
-  garminApi: GarminApi = productionGarminApi
+  dataSource?: McpDataSource,
+  garminApi?: GarminApi,
+  userId = "owner"
 ) {
+  const scopedDataSource = dataSource ?? productionDataSource(userId);
+  const scopedGarminApi = garminApi ?? createProductionGarminApi(userId);
   const server = new McpServer(
     { name: "endurance-bridge", version: "0.3.0" },
     {
@@ -207,7 +212,7 @@ export function createEnduranceBridgeMcpServer(
       annotations: READ_ONLY
     },
     async () => {
-      const connection = await dataSource.connection("garmin");
+      const connection = await scopedDataSource.connection("garmin");
       return textResult({
         connected: Boolean(connection),
         provider: "garmin",
@@ -236,11 +241,11 @@ export function createEnduranceBridgeMcpServer(
       annotations: READ_ONLY
     },
     async ({ from, to, limit }) => {
-      const connection = await dataSource.connection("garmin");
+      const connection = await scopedDataSource.connection("garmin");
       if (!connection) return errorResult("Garmin is not connected.");
       try {
         const range = dateRange(from, to);
-        const activities = await dataSource.activities(
+        const activities = await scopedDataSource.activities(
           connection.providerUserId,
           range.from,
           range.to,
@@ -265,9 +270,9 @@ export function createEnduranceBridgeMcpServer(
       annotations: READ_ONLY
     },
     async ({ summaryId }) => {
-      const connection = await dataSource.connection("garmin");
+      const connection = await scopedDataSource.connection("garmin");
       if (!connection) return errorResult("Garmin is not connected.");
-      const records = await dataSource.activity(connection.providerUserId, summaryId);
+      const records = await scopedDataSource.activity(connection.providerUserId, summaryId);
       return textResult({ count: records.length, records });
     }
   );
@@ -287,11 +292,11 @@ export function createEnduranceBridgeMcpServer(
       annotations: READ_ONLY
     },
     async ({ type, from, to, limit }) => {
-      const connection = await dataSource.connection("garmin");
+      const connection = await scopedDataSource.connection("garmin");
       if (!connection) return errorResult("Garmin is not connected.");
       try {
         const range = dateRange(from, to);
-        const events = await dataSource.events({
+        const events = await scopedDataSource.events({
           provider: "garmin",
           providerUserId: connection.providerUserId,
           eventType: type,
@@ -315,7 +320,7 @@ export function createEnduranceBridgeMcpServer(
       annotations: GARMIN_READ
     },
     async ({ workoutId }) =>
-      liveRead(garminApi, {
+      liveRead(scopedGarminApi, {
         method: "GET",
         path: `/training-api/workout/v2/${encodeURIComponent(String(workoutId))}`
       })
@@ -333,8 +338,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertCreateIdAbsent(payload, "workoutId");
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "WORKOUT_IMPORT",
           request: { method: "POST", path: "/workoutportal/workout/v2", body: payload },
           dryRun,
@@ -358,8 +363,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertUpdateIdMatches(payload, "workoutId", workoutId);
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "WORKOUT_IMPORT",
           request: {
             method: "PUT",
@@ -385,8 +390,8 @@ export function createEnduranceBridgeMcpServer(
     },
     async ({ workoutId, dryRun, confirm }) =>
       writeGarmin({
-        dataSource,
-        api: garminApi,
+        dataSource: scopedDataSource,
+        api: scopedGarminApi,
         permission: "WORKOUT_IMPORT",
         request: {
           method: "DELETE",
@@ -411,7 +416,7 @@ export function createEnduranceBridgeMcpServer(
     async ({ startDate, endDate }) => {
       try {
         const query = scheduleRange(startDate, endDate);
-        return liveRead(garminApi, {
+        return liveRead(scopedGarminApi, {
           method: "GET",
           path: `/training-api/schedule?${query}`
         });
@@ -430,7 +435,7 @@ export function createEnduranceBridgeMcpServer(
       annotations: GARMIN_READ
     },
     async ({ workoutScheduleId }) =>
-      liveRead(garminApi, {
+      liveRead(scopedGarminApi, {
         method: "GET",
         path: `/training-api/schedule/${encodeURIComponent(String(workoutScheduleId))}`
       })
@@ -448,8 +453,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertCreateIdAbsent(payload, "scheduleId");
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "WORKOUT_IMPORT",
           request: { method: "POST", path: "/training-api/schedule/", body: payload },
           dryRun,
@@ -477,8 +482,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertUpdateIdMatches(payload, "scheduleId", workoutScheduleId);
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "WORKOUT_IMPORT",
           request: {
             method: "PUT",
@@ -504,8 +509,8 @@ export function createEnduranceBridgeMcpServer(
     },
     async ({ workoutScheduleId, dryRun, confirm }) =>
       writeGarmin({
-        dataSource,
-        api: garminApi,
+        dataSource: scopedDataSource,
+        api: scopedGarminApi,
         permission: "WORKOUT_IMPORT",
         request: {
           method: "DELETE",
@@ -525,7 +530,7 @@ export function createEnduranceBridgeMcpServer(
       annotations: GARMIN_READ
     },
     async ({ courseId }) =>
-      liveRead(garminApi, {
+      liveRead(scopedGarminApi, {
         method: "GET",
         path: `/training-api/courses/v1/course/${encodeURIComponent(String(courseId))}`
       })
@@ -543,8 +548,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertCreateIdAbsent(payload, "courseId");
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "COURSE_IMPORT",
           request: {
             method: "POST",
@@ -572,8 +577,8 @@ export function createEnduranceBridgeMcpServer(
       try {
         assertUpdateIdMatches(payload, "courseId", courseId);
         return writeGarmin({
-          dataSource,
-          api: garminApi,
+          dataSource: scopedDataSource,
+          api: scopedGarminApi,
           permission: "COURSE_IMPORT",
           request: {
             method: "PUT",
@@ -599,8 +604,8 @@ export function createEnduranceBridgeMcpServer(
     },
     async ({ courseId, dryRun, confirm }) =>
       writeGarmin({
-        dataSource,
-        api: garminApi,
+        dataSource: scopedDataSource,
+        api: scopedGarminApi,
         permission: "COURSE_IMPORT",
         request: {
           method: "DELETE",

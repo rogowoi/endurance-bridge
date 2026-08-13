@@ -1,22 +1,24 @@
 # Endurance Bridge
 
-Endurance Bridge is a private, self-hosted remote MCP server for endurance-sport data. Deploy one instance, connect your Garmin account, and give Codex, Claude Code, or another MCP client full Garmin Training and Courses access with a personal bearer key.
+Endurance Bridge connects Garmin to Codex, Claude Code, and other MCP clients. The hosted app supports separate invite-only accounts, private Garmin connections, and individual MCP keys.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
 ## Give this repository to Codex or Claude Code
 
-Start from a clean Codex session with:
+Invited friends can start from a clean session with:
 
-> Set up https://github.com/rogowoi/endurance-bridge so I can access my Garmin data from Codex or Claude Code.
+> Help me connect my Garmin using https://github.com/rogowoi/endurance-bridge
 
-The repository's [`AGENTS.md`](./AGENTS.md) contains the shared onboarding contract. Codex reads it directly; Claude Code loads it through [`CLAUDE.md`](./CLAUDE.md). Either agent will clone and test the project, generate unique installation secrets, deploy a private instance, guide the required Garmin developer configuration and OAuth step, add the resulting MCP endpoint, and verify it with a live read.
+The repository's [`AGENTS.md`](./AGENTS.md) contains the shared onboarding contract. Codex reads it directly; Claude Code loads it through [`CLAUDE.md`](./CLAUDE.md). The agent asks for the user's invite link, guides Garmin connection, adds the hosted MCP, and verifies it with a live read—without discussing infrastructure unless the user asks to self-host.
 
-This self-hosted model requires the user to have an approved Garmin Connect Developer Program application. The public repository never contains a shared Garmin secret or bridge API key.
+Friends do not need a Garmin developer account, database, or Vercel project. The hosted deployment uses the approved Endurance Bridge Garmin application. Self-hosters still need their own approved Garmin developer application.
 
 ## What works
 
 - Garmin OAuth 2.0 PKCE connection from a private setup page
+- Invite-only multi-user accounts with isolated connections
+- One-way-hashed MCP keys and browser sessions
 - Garmin Activity PUSH webhook ingestion
 - Encrypted provider-token storage using AES-256-GCM
 - Bearer-protected Streamable HTTP MCP endpoint
@@ -44,12 +46,12 @@ Strava and TrainingPeaks are planned adapters. The event model is already provid
 
 ## Architecture
 
-This is intentionally single-tenant. There are no Endurance Bridge user accounts:
+The hosted deployment is multi-user:
 
-1. The owner protects setup and MCP access with `BRIDGE_API_KEY`.
-2. Garmin OAuth tokens are encrypted before storage.
-3. Garmin sends activity events to an unguessable webhook URL.
-4. MCP clients can read the connected owner's stored activity feed and manage Garmin workouts, schedules, and courses.
+1. The owner creates single-use, seven-day invitation links.
+2. Every invited person gets a separate account, Garmin connection, and MCP key.
+3. MCP keys are stored as hashes; Garmin OAuth tokens are encrypted before storage.
+4. Every MCP request resolves the authenticated user before reading data or calling Garmin.
 
 Every mutation defaults to a dry run. To send it to Garmin, repeat the same tool call with `dryRun: false` and `confirm: "WRITE_TO_GARMIN"`.
 
