@@ -105,6 +105,14 @@ test("exposes Garmin activity, workout, schedule, and course tools", async () =>
   });
   assert.equal(result.isError, undefined);
   assert.equal((result.structuredContent as { count: number }).count, 1);
+  assert.equal(
+    (result.structuredContent as { source: string }).source,
+    "endurance_bridge_push_store"
+  );
+  assert.equal(
+    (result.structuredContent as { liveGarminQuery: boolean }).liveGarminQuery,
+    false
+  );
 
   await client.close();
   await server.close();

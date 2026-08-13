@@ -1,0 +1,11 @@
+interface:
+  display_name: "Endurance Bridge"
+  short_description: "Connect and use Garmin through Endurance Bridge MCP"
+  default_prompt: "Use $endurance-bridge to connect my Garmin, verify the MCP, and help me use my training data."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "endurance-bridge"
+      description: "Private Garmin data and training operations"
+      transport: "streamable_http"
+      url: "https://endurance-bridge-api.vercel.app/api/mcp"

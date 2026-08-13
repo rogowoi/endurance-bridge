@@ -23,6 +23,8 @@ test("renders a valid friend-facing onboarding page", () => {
   assert.match(html, /You’re invited/);
   assert.match(html, /Add your AI client/);
   assert.match(html, /Bring a training partner/);
+  assert.match(html, /launchctl setenv ENDURANCE_BRIDGE_API_KEY/);
+  assert.match(html, /fully quit Codex with ⌘Q/);
 
   const browserScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(browserScript);

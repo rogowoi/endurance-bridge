@@ -14,6 +14,24 @@ The repository's [`AGENTS.md`](./AGENTS.md) contains the shared onboarding contr
 
 Friends do not need a Garmin developer account, database, or Vercel project. The hosted deployment uses the approved Endurance Bridge Garmin application. Self-hosters still need their own approved Garmin developer application.
 
+## Install the Endurance Bridge skill
+
+Give Codex this request:
+
+> Install the `endurance-bridge` skill from https://github.com/rogowoi/endurance-bridge/tree/main/skills/endurance-bridge
+
+Codex can install it with its built-in `skill-installer`. The skill becomes available on the next turn and teaches a clean session how to onboard a user, register the hosted MCP, restart the macOS app correctly, verify the connection with a live read, and use all Garmin read and write tools.
+
+Manual Codex installation is also supported:
+
+```bash
+python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --repo rogowoi/endurance-bridge \
+  --path skills/endurance-bridge
+```
+
+The skill uses the open Agent Skills directory format, so other compatible clients can install the [`skills/endurance-bridge`](./skills/endurance-bridge) folder as well.
+
 ## What works
 
 - Garmin OAuth 2.0 PKCE connection from a private setup page
@@ -43,6 +61,8 @@ Friends do not need a Garmin developer account, database, or Vercel project. The
 - Codex and Claude Code configuration
 
 Strava and TrainingPeaks are planned adapters. The event model is already provider-neutral.
+
+Activity and health tools read summaries already delivered to this deployment through Garmin PUSH; they are not live Garmin history queries. If expected history is missing, use Garmin API Tools **Summary Resender** for the relevant user, summary types, and time range. Workout, schedule, and course reads call Garmin live.
 
 ## Architecture
 
@@ -103,16 +123,21 @@ Enable `activities`, `activityDetails`, `manuallyUpdatedActivities`, `deregistra
 
 ## Add to Codex
 
-Each deployment has a different origin and bridge key, so Codex registers the MCP after deployment:
+Each deployment has a different origin and bridge key, so Codex registers the MCP after deployment.
+
+For the Codex desktop app on macOS, set the key for both terminal and GUI processes before registering the server:
 
 ```bash
 export ENDURANCE_BRIDGE_API_KEY='your-bridge-key'
+launchctl setenv ENDURANCE_BRIDGE_API_KEY "$ENDURANCE_BRIDGE_API_KEY"
 codex mcp add endurance-bridge \
   --url https://YOUR_ORIGIN/api/mcp \
   --bearer-token-env-var ENDURANCE_BRIDGE_API_KEY
 ```
 
-Restart the Codex app, CLI, or IDE extension after changing MCP configuration. Use `/mcp` to inspect the connection.
+Then fully quit Codex with **Codex → Quit Codex** or `⌘Q` and reopen it. Closing its window is not enough: the running app must restart to inherit the key. Start a clean task and ask it to call `garmin_connection_status`, followed by a harmless read such as `garmin_list_schedules`.
+
+For Codex CLI-only use, the `export` and `codex mcp add` lines are sufficient when Codex is launched from that same shell. After a Mac restart, run the `launchctl setenv` line again before opening the desktop app.
 
 ## Add to Claude Code
 

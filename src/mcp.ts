@@ -198,7 +198,7 @@ export function createEnduranceBridgeMcpServer(
     { name: "endurance-bridge", version: "0.3.0" },
     {
       instructions:
-        "Endurance Bridge exposes private Garmin activity data and the complete Garmin Training and Courses resource operations. Treat activity, health, location, routes, workouts, and routine data as sensitive. Reads execute immediately. Before every create, update, schedule, or delete operation, call the same tool with dryRun=true, show the exact request to the user, obtain immediate approval, then call it once with dryRun=false and confirm=WRITE_TO_GARMIN. Never reuse a confirmation. Missing feed data does not prove that no training occurred."
+        "Endurance Bridge exposes private Garmin activity data and the complete Garmin Training and Courses resource operations. Treat activity, health, location, routes, workouts, and routine data as sensitive. Activity and event tools query summaries already received by the bridge through Garmin PUSH; they do not query Garmin live and must never be described as Garmin returning zero. Workout, schedule, and course reads query Garmin live. Before every create, update, schedule, or delete operation, call the same tool with dryRun=true, show the exact request to the user, obtain immediate approval, then call it once with dryRun=false and confirm=WRITE_TO_GARMIN. Never reuse a confirmation."
     }
   );
 
@@ -232,7 +232,7 @@ export function createEnduranceBridgeMcpServer(
     {
       title: "List Garmin activities",
       description:
-        "List completed Garmin activities. Optionally restrict results to an ISO timestamp range.",
+        "List activity summaries already received by Endurance Bridge through Garmin PUSH. This is not a live Garmin activity query; zero records means the bridge has no matching received summaries.",
       inputSchema: z.object({
         from: z.string().optional().describe("Inclusive ISO timestamp"),
         to: z.string().optional().describe("Exclusive ISO timestamp"),
@@ -251,7 +251,14 @@ export function createEnduranceBridgeMcpServer(
           range.to,
           limit
         );
-        return textResult({ count: activities.length, activities });
+        return textResult({
+          source: "endurance_bridge_push_store",
+          liveGarminQuery: false,
+          coverage:
+            "Only activity summaries previously delivered to this bridge through Garmin PUSH are included.",
+          count: activities.length,
+          activities
+        });
       } catch (error) {
         return errorResult(error instanceof Error ? error.message : "Invalid activity query");
       }
@@ -282,7 +289,7 @@ export function createEnduranceBridgeMcpServer(
     {
       title: "List Garmin feed events",
       description:
-        "Inspect raw normalized Garmin feed events, including health, activity, women's health, lifecycle, and permission events received by this bridge.",
+        "Inspect normalized events already received by Endurance Bridge through Garmin PUSH, including health, activity, women's health, lifecycle, and permission events. This is not a live Garmin query.",
       inputSchema: z.object({
         type: z.string().optional().describe("Optional Garmin event type"),
         from: z.string().optional().describe("Inclusive ISO timestamp"),
@@ -304,7 +311,14 @@ export function createEnduranceBridgeMcpServer(
           to: range.to,
           limit
         });
-        return textResult({ count: events.length, events });
+        return textResult({
+          source: "endurance_bridge_push_store",
+          liveGarminQuery: false,
+          coverage:
+            "Only events previously delivered to this bridge through Garmin PUSH are included.",
+          count: events.length,
+          events
+        });
       } catch (error) {
         return errorResult(error instanceof Error ? error.message : "Invalid event query");
       }
