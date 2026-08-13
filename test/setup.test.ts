@@ -19,10 +19,10 @@ test("renders a valid friend-facing onboarding page", () => {
 
   setupHandler({ method: "GET" } as never, response as never);
 
-  assert.match(html, /Your Garmin, available in your AI tools\./);
+  assert.match(html, /Your training\./);
   assert.match(html, /You’re invited/);
-  assert.match(html, /Add Endurance Bridge/);
-  assert.match(html, /Invite a friend/);
+  assert.match(html, /Add your AI client/);
+  assert.match(html, /Bring a training partner/);
 
   const browserScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(browserScript);
