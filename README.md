@@ -2,7 +2,7 @@
 
 Endurance Bridge is a multi-user MCP gateway for endurance data. A person connects a provider once, adds one private MCP endpoint to Codex, Claude, or another compatible client, and can then discuss training periods or manage training resources in plain language.
 
-Garmin is the active adapter. Strava and TrainingPeaks are represented in the capability model and are planned adapters; the server reports them as unavailable instead of pretending they work.
+Garmin is the active adapter. Additional providers will appear only after their adapters actually work.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Frogowoi%2Fendurance-bridge&env=DATABASE_URL,BRIDGE_API_KEY,APP_ORIGIN,CONNECTION_ENCRYPTION_KEY,GARMIN_CLIENT_ID,GARMIN_CLIENT_SECRET,GARMIN_WEBHOOK_SECRET&project-name=endurance-bridge&repository-name=endurance-bridge)
 
@@ -63,7 +63,7 @@ The default tool for training discussion is `endurance_get_period`:
 
 Every period response contains deterministic totals, source provenance, and coverage. A partial result is never interpreted as zero training.
 
-For a newly connected Garmin account, Activity and Health data already delivered after connection can be queried immediately at runtime. Garmin does not provide an arbitrary historical pull endpoint for these products; `endurance_sync` detects pre-connection gaps and returns the exact Summary Resender action instead. Calendar, workout, and route operations call Garmin live.
+For a newly connected Garmin account, new Activity and Health data can be queried immediately. The bridge also creates an owner-managed history request during onboarding. Invited users see a simple loading state while the operator prepares recent history; they are never sent to Garmin developer tooling. Calendar, workout, and route operations call Garmin live.
 
 ## Architecture
 
@@ -73,6 +73,7 @@ For a newly connected Garmin account, Activity and Health data already delivered
 4. Each MCP request resolves the authenticated user before reading or calling a provider.
 5. Provider records are normalized into canonical activities and health events with source provenance.
 6. Mutations are provider-neutral: prepare an exact preview, obtain immediate approval, then apply the encrypted change token once.
+7. Historical Garmin recovery is queued automatically and completed by the deployment owner from the dashboard.
 
 ## Deploy
 

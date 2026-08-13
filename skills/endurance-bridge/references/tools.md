@@ -19,7 +19,7 @@ Use half-open time ranges: `from` is inclusive and `to` is exclusive. Resolve na
 
 `ready` means the adapter can answer the requested range under its documented delivery model. `partial` means some requested history may be missing. `unavailable` means the provider, permission, or adapter is not available. Always preserve `coverage` and `provenance` when presenting conclusions.
 
-Garmin Activity and Health use provider PUSH delivery into the bridge. New post-connection summaries are runtime-queryable from the mirror. Historical gaps require the recovery action returned by `endurance_sync`. Garmin calendar, workout, and route calls are live.
+Garmin Activity and Health use provider PUSH delivery into the bridge. New post-connection summaries are runtime-queryable from the mirror. Historical gaps are queued for the deployment owner; invited users receive `history_loading` and should retry later. Garmin calendar, workout, and route calls are live.
 
 ## Change tools
 

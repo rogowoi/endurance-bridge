@@ -85,6 +85,23 @@ function dataSource(): McpDataSource {
         latest_received_at: "2026-08-13T07:00:00.000Z",
         record_count: 20
       };
+    },
+    async historyState() {
+      return undefined;
+    },
+    async requestHistory(_provider, providerUserId, from, to, resources) {
+      return {
+        id: "history-1",
+        userId: "test-user",
+        provider: "garmin",
+        providerUserId,
+        from: from.toISOString(),
+        to: to.toISOString(),
+        resources,
+        status: "pending",
+        createdAt: "2026-08-13T00:00:00.000Z",
+        updatedAt: "2026-08-13T00:00:00.000Z"
+      };
     }
   };
 }
@@ -181,7 +198,7 @@ test("returns a complete canonical period bundle", async () => {
   await server.close();
 });
 
-test("reports partial historical coverage for a newly connected account", async () => {
+test("queues historical coverage without exposing developer tooling", async () => {
   const { client, server } = await connectedClient();
   const result = await client.callTool({
     name: "endurance_get_coverage",
@@ -207,8 +224,9 @@ test("reports partial historical coverage for a newly connected account", async 
   });
   assert.equal(
     (sync.structuredContent as { status: string }).status,
-    "manual_action_required"
+    "history_loading"
   );
+  assert.doesNotMatch(JSON.stringify(sync.structuredContent), /Summary Resender|apis\.garmin/);
   await client.close();
   await server.close();
 });

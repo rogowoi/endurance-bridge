@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 import { decryptJson, encryptJson } from "../../../../src/connection-crypto.js";
 import { consumeOAuthState, upsertConnection } from "../../../../src/connections.js";
+import { requestHistory } from "../../../../src/history-requests.js";
 import {
   exchangeGarminCode,
   inspectGarminConnection
@@ -45,9 +46,18 @@ export default async function handler(
       encryptedToken: encryptJson(token),
       permissions: connection.permissions
     });
+    const now = new Date();
+    await requestHistory({
+      userId: stored.userId,
+      provider: "garmin",
+      providerUserId: connection.providerUserId,
+      from: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
+      to: now,
+      resources: ["activities", "health"]
+    });
     return response
       .status(200)
-      .send(page("Garmin connected", "Your Garmin account is ready. Return to Endurance Bridge to add it to Codex or Claude.", true));
+      .send(page("Garmin connected", "New sessions are live now. We’re preparing your recent history in the background; return to Endurance Bridge to continue.", true));
   } catch {
     return response
       .status(400)

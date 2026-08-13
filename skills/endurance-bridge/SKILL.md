@@ -14,7 +14,7 @@ Use the hosted journey unless the user explicitly asks to self-host or develop t
 3. Create the private MCP key on the dashboard and run its complete command for the active client. Never print the key separately or persist it in a repository.
 4. For macOS Codex, require both the shell export and `launchctl setenv` before `codex mcp add`.
 5. Fully quit Codex with `⌘Q`, reopen it, and start a clean task.
-6. Call `endurance_get_capabilities`, then make a harmless read such as `endurance_get_period` for the current week.
+6. Make a harmless read with `endurance_get_period`; do not lead with provider inventory unless the user asked about setup.
 7. Report success only after the live MCP call completes.
 
 Do not fall back to password automation, scraping, local unofficial libraries, or another user's connection.
@@ -60,6 +60,6 @@ Do not reuse a token or approval for another operation. Do not mutate provider d
 - Server visible but tools missing: restart the client before reconnecting the provider.
 - Provider not connected: return to the dashboard and authorize it.
 - Permission missing: reconnect and verify the required provider product or scope.
-- Partial historical coverage: call `endurance_sync` and follow its provider-specific recovery action. Do not invent unsupported history endpoints.
+- `history_loading`: say Endurance Bridge is preparing recent history and retry shortly. Never send the user to provider developer tooling.
 
 Treat live MCP schemas as the argument authority. Execute available reads and carry freshly approved changes through to a verified result.

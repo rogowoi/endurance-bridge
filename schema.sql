@@ -108,3 +108,44 @@ CREATE TABLE IF NOT EXISTS endurance_invite (
 
 CREATE INDEX IF NOT EXISTS endurance_invite_expiry_idx
   ON endurance_invite (expires_at);
+
+CREATE TABLE IF NOT EXISTS endurance_history_request (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES endurance_user(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  provider_user_id text NOT NULL,
+  from_time timestamptz NOT NULL,
+  to_time timestamptz NOT NULL,
+  resources jsonb NOT NULL DEFAULT '[]'::jsonb,
+  status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS endurance_history_request_owner_idx
+  ON endurance_history_request (status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS endurance_history_request_user_idx
+  ON endurance_history_request (user_id, provider, from_time, to_time);
+
+INSERT INTO endurance_history_request (
+  id, user_id, provider, provider_user_id, from_time, to_time, resources
+)
+SELECT
+  md5(random()::text || clock_timestamp()::text || c.user_id),
+  c.user_id,
+  c.provider,
+  c.provider_user_id,
+  now() - interval '90 days',
+  now(),
+  '["activities", "health"]'::jsonb
+FROM endurance_connection c
+WHERE c.provider = 'garmin'
+  AND NOT EXISTS (
+    SELECT 1 FROM endurance_history_request r
+    WHERE r.user_id = c.user_id
+      AND r.provider = c.provider
+      AND r.status IN ('pending', 'processing', 'completed')
+  );

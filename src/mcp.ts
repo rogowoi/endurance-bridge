@@ -18,6 +18,11 @@ import {
   sealEnduranceChange
 } from "./endurance-changes.js";
 import {
+  historyState,
+  requestHistory,
+  type HistoryRequest
+} from "./history-requests.js";
+import {
   createProductionGarminApi,
   type GarminApi,
   type GarminApiRequest
@@ -31,7 +36,7 @@ import {
 } from "./store.js";
 import type { Provider } from "./types.js";
 
-const PROVIDERS = ["garmin", "strava", "trainingpeaks"] as const;
+const PROVIDERS = ["garmin"] as const;
 const RESOURCES = ["activities", "health", "workouts", "calendar", "routes"] as const;
 const APPLY_CONFIRMATION = "APPLY_ENDURANCE_CHANGE";
 
@@ -233,6 +238,18 @@ export interface McpDataSource {
     providerUserId: string,
     eventTypes: string[]
   ): Promise<unknown>;
+  historyState(
+    provider: Provider,
+    from: Date,
+    to: Date
+  ): Promise<HistoryRequest | undefined>;
+  requestHistory(
+    provider: Provider,
+    providerUserId: string,
+    from: Date,
+    to: Date,
+    resources: string[]
+  ): Promise<HistoryRequest>;
 }
 
 function productionDataSource(userId: string): McpDataSource {
@@ -241,7 +258,11 @@ function productionDataSource(userId: string): McpDataSource {
     events: queryEvents,
     activities: queryGarminActivities,
     activity: queryGarminActivity,
-    coverage: queryProviderEventCoverage
+    coverage: queryProviderEventCoverage,
+    historyState: (provider, from, to) =>
+      historyState({ userId, provider, from, to }),
+    requestHistory: (provider, providerUserId, from, to, resources) =>
+      requestHistory({ userId, provider, providerUserId, from, to, resources })
   };
 }
 
@@ -256,14 +277,6 @@ function providerCapabilities(
   provider: EnduranceProvider,
   connection: ProviderConnection | undefined
 ) {
-  if (provider !== "garmin") {
-    return {
-      provider,
-      status: "adapter_planned",
-      connected: Boolean(connection),
-      resources: {}
-    };
-  }
   const granted = new Set(connection?.permissions ?? []);
   const resource = (permission: string, delivery: string, operations: string[]) => ({
     available: Boolean(connection) && granted.has(permission),
@@ -296,7 +309,7 @@ async function coverageFor(
   to?: Date
 ) {
   if (provider !== "garmin") {
-    return { provider, resource, status: "unavailable", reason: "adapter_planned" };
+    return { provider, resource, status: "unavailable", reason: "adapter_unavailable" };
   }
   if (!connection) return { provider, resource, status: "unavailable", reason: "not_connected" };
   const permission = permissionsForResource(resource);
@@ -315,14 +328,28 @@ async function coverageFor(
   )) as Record<string, unknown>;
   const connectedAt = new Date(connection.connectedAt);
   const startsBeforeConnection = Boolean(from && from < connectedAt);
+  const history = startsBeforeConnection && from && to
+    ? await dataSource.historyState(provider, from, to)
+    : undefined;
+  const historyReady = history?.status === "completed";
+  const historyLoading = history?.status === "pending" || history?.status === "processing";
   return {
     provider,
     resource,
-    status: startsBeforeConnection ? "partial" : "ready",
+    status: startsBeforeConnection
+      ? historyReady
+        ? "ready"
+        : historyLoading
+          ? "loading"
+          : "partial"
+      : "ready",
     delivery: "push_mirror",
     connectedAt: connection.connectedAt,
     requested: from && to ? { from: from.toISOString(), to: to.toISOString() } : null,
-    historyBeforeConnection: startsBeforeConnection ? "sync_required" : "not_requested",
+    historyBeforeConnection: startsBeforeConnection
+      ? history?.status ?? "not_requested"
+      : "not_requested",
+    historyRequestId: history?.id ?? null,
     observed: {
       earliestStartedAt: isoValue(observed.earliest_started_at),
       latestStartedAt: isoValue(observed.latest_started_at),
@@ -331,7 +358,7 @@ async function coverageFor(
       recordCount: Number(observed.record_count ?? 0)
     },
     assurance:
-      "Ready means the requested period began after this connection started; missing historical coverage is always reported separately."
+        "Ready means this range is available under the provider delivery model. Loading means the bridge operator is preparing historical data."
   };
 }
 
@@ -380,6 +407,21 @@ async function buildPeriod(input: {
   include: Array<"activities" | "health" | "calendar">;
 }) {
   const connection = await input.dataSource.connection("garmin");
+  if (connection && input.from < new Date(connection.connectedAt)) {
+    const resources = input.include.filter(
+      (resource): resource is "activities" | "health" =>
+        resource === "activities" || resource === "health"
+    );
+    if (resources.length > 0) {
+      await input.dataSource.requestHistory(
+        "garmin",
+        connection.providerUserId,
+        input.from,
+        input.to,
+        resources
+      );
+    }
+  }
   const coverage = await Promise.all(
     input.include.map((resource) =>
       coverageFor(input.dataSource, "garmin", resource, connection, input.from, input.to)
@@ -430,9 +472,13 @@ async function buildPeriod(input: {
 
   const activities = activityGroups.map((group) => group.primary);
   const plan = matchPlan(calendarItems, activityGroups, input.timezone);
+  const loading = coverage.some((item) => item.status === "loading");
   const partial = coverage.some((item) => item.status !== "ready") || missing.length > 0;
   return {
-    status: partial ? "partial" : "ready",
+    status: loading ? "history_loading" : partial ? "partial" : "ready",
+    userMessage: loading
+      ? "Recent Garmin history is being prepared by Endurance Bridge. New sessions are live now; retry this period shortly."
+      : null,
     period: {
       from: input.from.toISOString(),
       to: input.to.toISOString(),
@@ -462,10 +508,10 @@ export function createEnduranceBridgeMcpServer(
   const source = dataSource ?? productionDataSource(userId);
   const providerApi = garminApi ?? createProductionGarminApi(userId);
   const server = new McpServer(
-    { name: "endurance-bridge", version: "1.0.0" },
+    { name: "endurance-bridge", version: "1.1.0" },
     {
       instructions:
-        "Use endurance_get_period as the default tool for discussing today, a recent session, a week, a training block, or a comparison. Every result includes coverage and provenance; never interpret partial or unavailable coverage as zero training. Use capabilities before assuming provider support. Provider-specific APIs stay behind the generic endurance tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
+        "Use endurance_get_period directly for discussing today, a recent session, a week, a training block, or a comparison. Do not call endurance_get_capabilities first unless the user asks about setup or provider status. Every result includes coverage and provenance; never interpret partial data as zero training. If status is history_loading, say only that Endurance Bridge is preparing recent history and suggest retrying shortly; never send the user to provider developer tools. Before changing workouts, calendar items, or routes, call endurance_prepare_change, show its exact preview, obtain immediate approval, then call endurance_apply_change once with confirm=APPLY_ENDURANCE_CHANGE."
     }
   );
 
@@ -473,7 +519,7 @@ export function createEnduranceBridgeMcpServer(
     "endurance_get_capabilities",
     {
       title: "Get endurance provider capabilities",
-      description: "List connected providers and their truthful read, write, delivery, and permission capabilities.",
+      description: "List active connected provider adapters and their read, write, delivery, and permission capabilities. Use only for setup or status questions.",
       inputSchema: z.object({}),
       annotations: READ_ONLY
     },
@@ -533,7 +579,7 @@ export function createEnduranceBridgeMcpServer(
         const range = parseRange(from, to);
         const connection = await source.connection(provider);
         const coverage = await coverageFor(source, provider, resource, connection, range.from, range.to);
-        if (provider !== "garmin" || !connection) return textResult({ status: "unavailable", coverage });
+        if (!connection) return textResult({ status: "unavailable", coverage });
         if (["workouts", "calendar", "routes"].includes(resource)) {
           return textResult({ status: "not_required", reason: "resource_is_read_live", coverage });
         }
@@ -545,18 +591,28 @@ export function createEnduranceBridgeMcpServer(
             coverage
           });
         }
+        const history = await source.requestHistory(
+          provider,
+          connection.providerUserId,
+          range.from,
+          range.to,
+          [resource]
+        );
         return textResult({
-          status: "manual_action_required",
-          reason: "Garmin does not expose programmatic ad-hoc history synchronization.",
-          ownerAction: {
-            tool: "Garmin API Tools Summary Resender",
-            url: "https://apis.garmin.com/tools/login",
-            providerUserId: connection.providerUserId,
-            summaryTypes: resource === "activities" ? ACTIVITY_TYPES : [...HEALTH_EVENT_TYPES],
-            from: range.from.toISOString(),
-            to: range.to.toISOString()
-          },
-          coverage
+          status: history.status === "completed" ? "ready" : "history_loading",
+          message:
+            history.status === "completed"
+              ? "Historical data is ready."
+              : "Endurance Bridge is preparing this historical range. Retry shortly.",
+          requestId: history.id,
+          coverage: await coverageFor(
+            source,
+            provider,
+            resource,
+            connection,
+            range.from,
+            range.to
+          )
         });
       } catch (error) {
         return errorResult(error instanceof Error ? error.message : "Invalid sync request");
